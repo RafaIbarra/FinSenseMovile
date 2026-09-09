@@ -58,12 +58,13 @@ export default function ListadoMovimientosGastos({ navigation }) {
   const endpoint = `gastos-listados/movimientos-usuario`;
 
   const result = await apiRequest(endpoint, 'GET', {});
-  console.log(result);
+  
 
   if (result.sessionExpired) return;
 
   if (result.resp_correcta) {
     // ← AQUÍ: data es un array directo, no tiene .detalle
+    
     const registros = Array.isArray(result.data) ? result.data : [];
     
     if (registros.length > 0) {
@@ -72,7 +73,7 @@ export default function ListadoMovimientosGastos({ navigation }) {
         elemento.recarga = 'no';
       });
     }
-
+    
     setDataegresos(registros);
     setDataegresosresult(registros);
 
@@ -245,7 +246,7 @@ export default function ListadoMovimientosGastos({ navigation }) {
               activeOpacity={0.85}
             >
               <View style={styles.columnaLogo}>
-                {/* Si tienes logo: <LogoEmpresa imagePath={item.empresa?.logo} /> */}
+                <LogoEmpresa imagePath={item.empresa?.url_logo} /> 
               </View>
               <View style={styles.columnaInfo}>
                 <Text style={[styles.nombreEmpresa, { fontFamily: fonts.balsamiqregular.fontFamily, color: colors.screen_componente_estilos.color_texto }]}>

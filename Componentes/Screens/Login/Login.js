@@ -74,9 +74,9 @@ export default function Login() {
     actualizarEstadocomponente('loading', true);
     const datos = await Iniciarsesion(usuario, contrasena, '', '');
     const resp = datos['status'];
-    console.log(datos)
+    
     if (resp === 200) {
-      console.log("INICIO SESION CORRECTA")
+      
       const userdata = {
         token: datos['data']['token'],
         sesion: datos['data']['sesion'],
@@ -89,8 +89,7 @@ export default function Login() {
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
       const datestorage = await Handelstorage('obtenerdate');
-      console.log('datestorage-->',datestorage)
-      console.log('datos-->', datos['data'])
+      
       setSesiondata(datos['data']);
       setSesiondatadate(datestorage);
 
@@ -145,10 +144,11 @@ export default function Login() {
     const datosstarage = await ComprobarStorage();
     const credenciales = datosstarage['datosesion'];
     if (credenciales) {
-      const endpoint = 'sessions/ComprobarSession/';
+      const endpoint = 'sessions/control-sesion';
       const result = await Generarpeticion(endpoint, 'GET', {});
       const respuesta = result['resp'];
       if (respuesta === 200) {
+        
         setSesiondata(result['data']);
 
         // ─── SINCRONIZACIÓN DE TEMA (login automático) ─────────────

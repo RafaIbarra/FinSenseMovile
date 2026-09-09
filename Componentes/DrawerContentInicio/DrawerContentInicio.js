@@ -75,7 +75,7 @@ function DrawerContentInicio(props){
 
         const cargardatos=()=>{
 
-            
+            // console.log('sesiondata-->',sesiondata)
            
         }
         cargardatos()
@@ -105,16 +105,16 @@ function DrawerContentInicio(props){
                                             color: colors.screen_componente_estilos.color_fondo
                                             
                                             }]}>
-                              {/* @{sesiondata[0].UserName} */}
+                              @{sesiondata.UserName}
                             </Text>
                             <Text style={[ styles.textodatos,{fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_fondo}]}>
-                              {/* {sesiondata[0].nombre}; {sesiondata[0].apellido} */}
+                               {sesiondata.nombre}; {sesiondata.apellido} 
                             </Text>
 
                             
 
                             <Text style={[ styles.textohora, {fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_fondo }]}>
-                              {/* {sesiondata[0].fecha_registro} */}
+                               {sesiondata.fecha_registro} 
                             </Text>
 
                         </View>

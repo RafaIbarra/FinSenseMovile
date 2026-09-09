@@ -30,9 +30,9 @@ import Login from './Componentes/Screens/Login/Login';
 
 
 
- import ListadoMovimientosGastos from './Componentes/Screens/MovimientosGastos/ListadoMovimientosGastos';
-// import DetalleMovimientoGasto from './Componentes/Screens/MovimientosGastos/DetalleMovimientoGasto';
-// import RegistroMovimientoGasto from './Componentes/Screens/MovimientosGastos/RegistroMovimientoGasto';
+import ListadoMovimientosGastos from './Componentes/Screens/MovimientosGastos/ListadoMovimientosGastos';
+import DetalleMovimientoGasto from './Componentes/Screens/MovimientosGastos/DetalleMovimientoGasto';
+import RegistroMovimientoGasto from './Componentes/Screens/MovimientosGastos/RegistroMovimientoGasto';
 
 
 
@@ -82,7 +82,7 @@ import Login from './Componentes/Screens/Login/Login';
 // import RecorridoConceptoGasto from './Componentes/Screens/Recorrido/RecorridoConceptoGasto';
 // import RecorridoConceptoIngreso from './Componentes/Screens/Recorrido/RecorridoConceptoIngreso';
 // import RecorridoMedioPago from './Componentes/Screens/Recorrido/RecorridoMedioPago';
-// import SeleccionTema from './Componentes/Screens/Configuracion/SeleccionTema';
+import SeleccionTema from './Componentes/Screens/Configuracion/SeleccionTema';
 
 //////////////iconos///////////////////////////////
 import { Ionicons } from "@expo/vector-icons";
@@ -128,7 +128,7 @@ function DrawerInicio({navigation}) {
             fontFamily: fonts.balsamiqbold.fontFamily,
             lineHeight: 36,
           }}>
-            {/* {periodo} */}
+            {periodo}
           </Text>
           <Text style={{
             color: colors.navigation_estilos.color_texto,
@@ -136,7 +136,7 @@ function DrawerInicio({navigation}) {
             fontFamily: fonts.balsamiqbold.fontFamily,
             lineHeight: 24,
           }}>
-            {/* {sesiondatadate.nombremesactual} */}
+            {sesiondatadate.nombremesactual}
           </Text>
         </View>
         ),
@@ -180,7 +180,7 @@ function DrawerInicio({navigation}) {
           }}
       />
 
-      <DrawerNav.Screen name="RootNavigator" 
+      {/* <DrawerNav.Screen name="RootNavigator" 
         component={RootNavigator}
         options={{
           drawerLabel: ({ color, size,focused }) => {
@@ -200,9 +200,9 @@ function DrawerInicio({navigation}) {
           drawerItemStyle:{borderBottomWidth:1,borderBottomColor:color_linea,marginBottom:5}
          }}
 
-       />
+       /> */}
 
-      {/* <DrawerNav.Screen name="Preferencias" 
+      <DrawerNav.Screen name="Preferencias" 
         component={SeleccionTema}
         options={{
           drawerLabel: ({ color, size,focused }) => {
@@ -222,7 +222,7 @@ function DrawerInicio({navigation}) {
           drawerItemStyle:{borderBottomWidth:1,borderBottomColor:color_linea,marginBottom:5}
          }}
 
-       /> */}
+       />
       
       
 
@@ -318,8 +318,8 @@ function RootStackHomeNavigator() {
       <RootStackHome.Screen name="TabsHome" component={TabsHome} />
 
       {/* === GASTOS: Detalle y Registro como hermanos del Tab === */}
-      {/* <RootStackHome.Screen name="DetalleMovimientoGasto" component={DetalleMovimientoGasto} />
-      <RootStackHome.Screen name="RegistroMovimientoGasto" component={RegistroMovimientoGasto} /> */}
+      <RootStackHome.Screen name="DetalleMovimientoGasto" component={DetalleMovimientoGasto} />
+      <RootStackHome.Screen name="RegistroMovimientoGasto" component={RegistroMovimientoGasto} />
 
       {/* === CATEGORÍAS === */}
       {/* <RootStackHome.Screen name="DetalleMovimientoIngreso" component={DetalleMovimientoIngreso} />

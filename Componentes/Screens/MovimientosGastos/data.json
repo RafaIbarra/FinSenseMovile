@@ -1,0 +1,83 @@
+[
+    {
+        "id": 105,
+        "fecha_registro": "02/09/26 02:50:22",
+        "fecha_gasto": "21/08/26",
+        "total_gasto": 267000,
+        "iva_diez": 24272,
+        "iva_cinco": 0,
+        "tipo_registro": "Automatico",
+        "categoria_id": 51,
+        "empresa_id": 42,
+        "empresa": {
+            "id": 42,
+            "nombre": "Tricolor S.A. PINTURERIA",
+            "ruc": "80029149-2",
+            "url_logo": null
+        },
+        "categoria": {
+            "id": 51,
+            "nombre": "Ferretería Y Pinturas"
+        },
+        "numero_factura": "002-001-0017995",
+        "modelo_extraccion_datos": "gemini-3.1-flash-lite",
+        "modelo_clasificador": "qwen/qwen3.6-27b",
+        "tareas_procesadas": [
+            {
+                "codigo_tarea": "U_1_F_2026_09_01_T_23_46_51",
+                "fecha_procesado": "02/09/2026 02:50:22"
+            }
+        ],
+        "etiquetas": [
+            {
+                "idetiqueta": 94,
+                "nombre": "Pinturas"
+            },
+            {
+                "idetiqueta": 121,
+                "nombre": "Disolventes"
+            },
+            {
+                "idetiqueta": 122,
+                "nombre": "Resinas Y Selladores"
+            }
+        ],
+        "conceptos": [
+            {
+                "idconcepto": 234,
+                "nombre": "KILLING THINNER UNIVERSAL 0.9 LT 25.06.2026",
+                "etiqueta": {
+                    "id": 94,
+                    "nombre": "Pinturas"
+                }
+            },
+            {
+                "idconcepto": 235,
+                "nombre": "BELLACASA PINTA MAIS SALMON 3,6LTS - 220126",
+                "etiqueta": {
+                    "id": 94,
+                    "nombre": "Pinturas"
+                }
+            },
+            {
+                "idconcepto": 236,
+                "nombre": "NOVACOR RESINA ACR IMPERM SOLVEN 1 LTS - 22012026",
+                "etiqueta": {
+                    "id": 121,
+                    "nombre": "Disolventes"
+                }
+            },
+            {
+                "idconcepto": 237,
+                "nombre": "BELLACASA PINTA MAIS SALMON 3,6LTS - 13112024",
+                "etiqueta": {
+                    "id": 122,
+                    "nombre": "Resinas Y Selladores"
+                }
+            }
+        ],
+        "imagenes": [
+            "https://finsense-dev-gastos.rafaelibarra.xyz/FIN_SENSE_DEV_20260901_234651_4376bb5e.jpeg"
+        ]
+    }
+]

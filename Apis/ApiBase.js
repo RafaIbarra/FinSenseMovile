@@ -1,5 +1,5 @@
  
-// const ip='192.168.1.102'
+// const ip='192.168.1.100'
 // const puerto='8010'
 // export const API_BASE=`http://${ip}:${puerto}/api`
 
