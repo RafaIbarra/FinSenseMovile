@@ -65,8 +65,8 @@ export default function ListadoMovimientosGastos({ navigation }) {
   if (result.resp_correcta) {
     // ← AQUÍ: data es un array directo, no tiene .detalle
     
-    const registros = Array.isArray(result.data) ? result.data : [];
-    
+    const registros = Array.isArray(result.data.data_registro) ? result.data.data_registro : [];
+
     if (registros.length > 0) {
       registros.forEach((elemento) => {
         elemento.key = elemento.id?.toString(); // ← id en minúscula

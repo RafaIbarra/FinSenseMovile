@@ -1,8 +1,9 @@
 import React, { useState, useContext,useEffect } from 'react';
 import {
-  View, StyleSheet, Text, ScrollView, TouchableOpacity,
-  TextInput,KeyboardAvoidingView,Platform
+    View, StyleSheet, Text, ScrollView, TouchableOpacity,
+    TextInput,KeyboardAvoidingView,Platform, Image, ActivityIndicator
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from "@react-navigation/native";
 import { useTheme } from '@react-navigation/native';
 import { AuthContext } from '../../../AuthContext';
@@ -52,37 +53,151 @@ export default function RegistroMovimientoGasto({ navigation }){
     };
 
     // ── Campos del formulario ──
-    const [rucEmpresa, setRucEmpresa] = useState('');
-    const [fecha, setFecha] = useState('');
-    const [numeroFactura, setNumeroFactura] = useState('');
-    const [total, setTotal] = useState('');
-    const [ivaDiez, setIvaDiez] = useState('0');
-    const [ivaCinco, setIvaCinco] = useState('0');
-    const [categoria, setCategoria] = useState('');
-    const [etiquetaActual, setEtiquetaActual] = useState('');
-    const [etiquetas, setEtiquetas] = useState([]);
+    const [comprobante, setComprobante] = useState(null);
+    const [payload, setPayload] = useState(null);
+    const [extrayendo, setExtrayendo] = useState(false);
 
-    const agregarEtiqueta = () => {
-        const valor = etiquetaActual.trim();
-        if (!valor) return;
-        if (etiquetas.includes(valor)) {
-            setEtiquetaActual('');
-            return;
-        }
-        setEtiquetas(prev => [...prev, valor]);
-        setEtiquetaActual('');
+    const actualizarFactura = (campo, valor) => {
+        setPayload(prev => ({
+            ...prev,
+            factura: { ...prev.factura, [campo]: valor },
+        }));
     };
 
-    const quitarEtiqueta = (valor) => {
-        setEtiquetas(prev => prev.filter(e => e !== valor));
+    const actualizarClasificacion = (campo, valor) => {
+        setPayload(prev => ({
+            ...prev,
+            clasificacion: { ...prev.clasificacion, [campo]: valor },
+        }));
+    };
+
+    const mostrarError = (mensaje) => {
+        setBodynotificacion(prev => ({
+            ...prev,
+            titulo: 'GASTOS',
+            mensaje,
+            is_error: true,
+        }));
+        setEstadonotificacion(true);
+    };
+
+    const obtenerMensajeApi = (data, mensajePredeterminado) => {
+        if (data?.message) return data.message;
+        if (data?.mensaje_error) return data.mensaje_error;
+        if (typeof data?.detail === 'string') return data.detail;
+        if (Array.isArray(data?.detail)) {
+            return data.detail.map(error => `${error.loc?.join('.') || 'campo'}: ${error.msg}`).join('\n');
+        }
+        if (data?.error) return typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+        if (typeof data === 'string' && data.trim()) return data;
+        if (data && Object.keys(data).length > 0) return JSON.stringify(data);
+        return mensajePredeterminado;
+    };
+
+    const seleccionarComprobante = async () => {
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            quality: 1,
+        });
+
+        if (!result.canceled && result.assets?.[0]) {
+            setComprobante(result.assets[0]);
+            setPayload(null);
+        }
+    };
+
+    const extraerClasificar = async () => {
+        if (!comprobante?.uri) {
+            mostrarError('Seleccione una imagen del comprobante');
+            return;
+        }
+
+        const formData = new FormData();
+        const archivo = Platform.OS === 'web' && comprobante.file
+            ? comprobante.file
+            : {
+                uri: comprobante.uri,
+                name: comprobante.fileName || 'comprobante.jpg',
+                type: comprobante.mimeType || 'image/jpeg',
+            };
+        formData.append('imagenes', archivo);
+
+        setExtrayendo(true);
+        setTitulo('Extrayendo comprobante');
+        actualizarEstadocomponente('tituloloading', 'EXTRAYENDO Y CLASIFICANDO');
+        actualizarEstadocomponente('loading', true);
+        try {
+            const result = await apiRequest('gastos/extraer-clasificar', 'POST', formData, { timeout: 60000 });
+            console.error('Respuesta gastos/extraer-clasificar:', result);
+
+            if (result.sessionExpired) return;
+            if (result.resp_correcta && result.data) {
+                setPayload(result.data);
+                setTitulo('Editar movimiento gasto');
+                return;
+            }
+
+            mostrarError(obtenerMensajeApi(result.data, 'No se pudo procesar el comprobante'));
+        } finally {
+            actualizarEstadocomponente('tituloloading', '');
+            actualizarEstadocomponente('loading', false);
+            setExtrayendo(false);
+        }
+    };
+
+    const actualizarEtiqueta = (indice, campo, valor) => {
+        setPayload(prev => ({
+            ...prev,
+            clasificacion: {
+                ...prev.clasificacion,
+                etiquetas: prev.clasificacion.etiquetas.map((etiqueta, index) => (
+                    index === indice ? { ...etiqueta, [campo]: valor } : etiqueta
+                )),
+            },
+        }));
+    };
+
+    const quitarEtiqueta = (indice) => {
+        setPayload(prev => ({
+            ...prev,
+            clasificacion: {
+                ...prev.clasificacion,
+                etiquetas: prev.clasificacion.etiquetas.filter((_, index) => index !== indice),
+            },
+        }));
+    };
+
+    const agregarEtiqueta = () => {
+        setPayload(prev => ({
+            ...prev,
+            clasificacion: {
+                ...prev.clasificacion,
+                etiquetas: [...(prev.clasificacion.etiquetas || []), { etiqueta: '', conceptos: [] }],
+            },
+        }));
+    };
+
+    const actualizarConcepto = (etiquetaIndex, conceptoIndex, valor) => {
+        setPayload(prev => ({
+            ...prev,
+            clasificacion: {
+                ...prev.clasificacion,
+                etiquetas: prev.clasificacion.etiquetas.map((etiqueta, index) => (
+                    index === etiquetaIndex
+                        ? { ...etiqueta, conceptos: etiqueta.conceptos.map((concepto, idx) => idx === conceptoIndex ? valor : concepto) }
+                        : etiqueta
+                )),
+            },
+        }));
     };
 
     const validarFormulario = () => {
-        if (!rucEmpresa.trim()) return 'Ingrese el RUC de la empresa';
-        if (!fecha.trim()) return 'Ingrese la fecha del gasto';
-        if (!numeroFactura.trim()) return 'Ingrese el número de factura';
-        if (!total.trim() || isNaN(Number(total))) return 'Ingrese un total de gasto válido';
-        if (!categoria.trim()) return 'Ingrese la categoría';
+        if (!payload?.factura?.ruc_empresa?.trim()) return 'Ingrese el RUC de la empresa';
+        if (!payload?.factura?.fecha?.trim()) return 'Ingrese la fecha del gasto';
+        if (!payload?.factura?.numero_factura?.trim()) return 'Ingrese el número de factura';
+        if (payload?.factura?.total === '' || isNaN(Number(payload?.factura?.total))) return 'Ingrese un total de gasto válido';
+        if (!payload?.clasificacion?.categoria?.trim()) return 'Ingrese la categoría';
         return null;
     };
 
@@ -95,26 +210,14 @@ export default function RegistroMovimientoGasto({ navigation }){
         }
 
         const body = {
-            id: 0,
+            ...payload,
             factura: {
-                empresa: '',
-                rubro: '',
-                ruc_empresa: rucEmpresa.trim(),
-                fecha: fecha.trim(),
-                numero_factura: numeroFactura.trim(),
-                total: Number(total) || 0,
-                iva_diez: Number(ivaDiez) || 0,
-                iva_cinco: Number(ivaCinco) || 0,
-                detalle: [],
-                Model: '',
+                ...payload.factura,
+                total: Number(payload.factura.total) || 0,
+                iva_diez: Number(payload.factura.iva_diez) || 0,
+                iva_cinco: Number(payload.factura.iva_cinco) || 0,
             },
-            clasificacion: {
-                categoria: categoria.trim(),
-                etiquetas: etiquetas.map(e => ({ etiqueta: e })),
-                modelo_clasificador: '',
-            },
-            imagenes: {},
-            tipo_registro: 'Manual',
+            tipo_registro: payload.tipo_registro || 'Asistido',
         };
 
         actualizarEstadocomponente('tituloloading', 'Registrando');
@@ -183,16 +286,45 @@ export default function RegistroMovimientoGasto({ navigation }){
         keyboardShouldPersistTaps="handled"
             >
 
-                <Text style={[styles.tituloSeccion, { fontFamily: estilos.font_negrita, color: estilos.font_color }]}>
-                    Registrar Gasto
-                </Text>
+                <Text style={[styles.tituloSeccion, { fontFamily: estilos.font_negrita, color: estilos.font_color }]}>Registrar Gasto con comprobante</Text>
+
+                <TouchableOpacity
+                    style={[styles.btn, { backgroundColor: estilos.boton_color_fondo, borderColor: estilos.boton_color_borde }]}
+                    onPress={seleccionarComprobante}
+                >
+                    <Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_importe_color }}>
+                        {comprobante ? 'CAMBIAR COMPROBANTE' : 'SELECCIONAR COMPROBANTE'}
+                    </Text>
+                </TouchableOpacity>
+
+                {comprobante?.uri && <Image source={{ uri: comprobante.uri }} style={styles.preview} resizeMode="contain" />}
+
+                <TouchableOpacity
+                    style={[styles.btn, { backgroundColor: estilos.boton_color_fondo, borderColor: estilos.boton_color_borde, opacity: extrayendo ? 0.65 : 1 }]}
+                    onPress={extraerClasificar}
+                    disabled={extrayendo}
+                >
+                    {extrayendo ? (
+                        <View style={styles.loadingButtonContent}>
+                            <ActivityIndicator size="small" color={estilos.font_importe_color} />
+                            <Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_importe_color }}>PROCESANDO...</Text>
+                        </View>
+                    ) : (
+                        <Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_importe_color }}>EXTRAER Y CLASIFICAR</Text>
+                    )}
+                </TouchableOpacity>
+
+                {!payload && <Text style={[styles.ayuda, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>Seleccione un comprobante y ejecute la extracción para editar los datos.</Text>}
+
+                {payload && <>
+                <Text style={[styles.subtitulo, { fontFamily: estilos.font_negrita, color: estilos.font_color }]}>Datos de la factura</Text>
 
                 <Text style={[styles.label, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>
                     RUC Empresa
                 </Text>
                 <TextInput
-                    value={rucEmpresa}
-                    onChangeText={setRucEmpresa}
+                    value={payload.factura.ruc_empresa || ''}
+                    onChangeText={(value) => actualizarFactura('ruc_empresa', value)}
                     placeholder="0-0"
                     placeholderTextColor={estilos.font_sub_color}
                     style={[styles.textInput, {
@@ -206,8 +338,8 @@ export default function RegistroMovimientoGasto({ navigation }){
                     Fecha (AAAA-MM-DD)
                 </Text>
                 <TextInput
-                    value={fecha}
-                    onChangeText={setFecha}
+                    value={payload.factura.fecha || ''}
+                    onChangeText={(value) => actualizarFactura('fecha', value)}
                     placeholder="2025-08-10"
                     placeholderTextColor={estilos.font_sub_color}
                     style={[styles.textInput, {
@@ -221,8 +353,8 @@ export default function RegistroMovimientoGasto({ navigation }){
                     Número de Factura
                 </Text>
                 <TextInput
-                    value={numeroFactura}
-                    onChangeText={setNumeroFactura}
+                    value={payload.factura.numero_factura || ''}
+                    onChangeText={(value) => actualizarFactura('numero_factura', value)}
                     placeholder="252-002-0022401"
                     placeholderTextColor={estilos.font_sub_color}
                     style={[styles.textInput, {
@@ -236,8 +368,8 @@ export default function RegistroMovimientoGasto({ navigation }){
                     Total Gasto
                 </Text>
                 <TextInput
-                    value={total}
-                    onChangeText={setTotal}
+                    value={String(payload.factura.total ?? '')}
+                    onChangeText={(value) => actualizarFactura('total', value)}
                     keyboardType="numeric"
                     placeholder="Monto"
                     placeholderTextColor={estilos.font_sub_color}
@@ -254,8 +386,8 @@ export default function RegistroMovimientoGasto({ navigation }){
                             IVA 10%
                         </Text>
                         <TextInput
-                            value={ivaDiez}
-                            onChangeText={setIvaDiez}
+                            value={String(payload.factura.iva_diez ?? 0)}
+                            onChangeText={(value) => actualizarFactura('iva_diez', value)}
                             keyboardType="numeric"
                             placeholder="0"
                             placeholderTextColor={estilos.font_sub_color}
@@ -271,8 +403,8 @@ export default function RegistroMovimientoGasto({ navigation }){
                             IVA 5%
                         </Text>
                         <TextInput
-                            value={ivaCinco}
-                            onChangeText={setIvaCinco}
+                            value={String(payload.factura.iva_cinco ?? 0)}
+                            onChangeText={(value) => actualizarFactura('iva_cinco', value)}
                             keyboardType="numeric"
                             placeholder="0"
                             placeholderTextColor={estilos.font_sub_color}
@@ -289,8 +421,8 @@ export default function RegistroMovimientoGasto({ navigation }){
                     Categoría
                 </Text>
                 <TextInput
-                    value={categoria}
-                    onChangeText={setCategoria}
+                    value={payload.clasificacion.categoria || ''}
+                    onChangeText={(value) => actualizarClasificacion('categoria', value)}
                     placeholder="Ej: Supermercados"
                     placeholderTextColor={estilos.font_sub_color}
                     style={[styles.textInput, {
@@ -300,50 +432,28 @@ export default function RegistroMovimientoGasto({ navigation }){
                     }]}
                 />
 
-                {/* ── Etiquetas ── */}
-                <Text style={[styles.label, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>
-                    Etiquetas (opcional)
-                </Text>
-                <View style={styles.filaEtiqueta}>
-                    <TextInput
-                        value={etiquetaActual}
-                        onChangeText={setEtiquetaActual}
-                        onSubmitEditing={agregarEtiqueta}
-                        placeholder="Ej: Bebidas"
-                        placeholderTextColor={estilos.font_sub_color}
-                        style={[styles.textInput, styles.inputEtiqueta, {
-                            fontFamily: estilos.font_normal,
-                            color: estilos.font_color,
-                            borderColor: estilos.cards_color_border,
-                        }]}
-                    />
-                    <TouchableOpacity
-                        style={[styles.btnAgregar, { backgroundColor: estilos.boton_color_fondo, borderColor: estilos.boton_color_borde }]}
-                        onPress={agregarEtiqueta}
-                    >
-                        <Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_importe_color, fontSize: 18 }}>
-                            +
-                        </Text>
-                    </TouchableOpacity>
-                </View>
+                <Text style={[styles.label, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>Empresa</Text>
+                <TextInput value={payload.factura.empresa || ''} onChangeText={(value) => actualizarFactura('empresa', value)} placeholder="Empresa" placeholderTextColor={estilos.font_sub_color} style={[styles.textInput, { fontFamily: estilos.font_normal, color: estilos.font_color, borderColor: estilos.cards_color_border }]} />
 
-                {etiquetas.length > 0 && (
-                    <View style={styles.chipsWrap}>
-                        {etiquetas.map((et) => (
-                            <View
-                                key={et}
-                                style={[styles.chip, { backgroundColor: estilos.cards_color_fondo, borderColor: estilos.cards_color_border }]}
-                            >
-                                <Text style={[styles.chipText, { fontFamily: estilos.font_normal, color: estilos.font_color }]}>
-                                    {et}
-                                </Text>
-                                <TouchableOpacity onPress={() => quitarEtiqueta(et)} style={styles.chipRemove}>
-                                    <Text style={{ color: estilos.font_sub_color, fontSize: 14 }}>✕</Text>
-                                </TouchableOpacity>
-                            </View>
+                <Text style={[styles.label, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>Rubro</Text>
+                <TextInput value={payload.factura.rubro || ''} onChangeText={(value) => actualizarFactura('rubro', value)} placeholder="Rubro" placeholderTextColor={estilos.font_sub_color} style={[styles.textInput, { fontFamily: estilos.font_normal, color: estilos.font_color, borderColor: estilos.cards_color_border }]} />
+
+                {/* ── Etiquetas y conceptos ── */}
+                <Text style={[styles.label, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>
+                    Etiquetas y conceptos
+                </Text>
+                {payload.clasificacion.etiquetas?.map((etiqueta, etiquetaIndex) => (
+                    <View key={`etiqueta-${etiquetaIndex}`} style={[styles.etiquetaCard, { backgroundColor: estilos.cards_color_fondo, borderColor: estilos.cards_color_border }]}>
+                        <View style={styles.filaEtiqueta}>
+                            <TextInput value={etiqueta.etiqueta || ''} onChangeText={(value) => actualizarEtiqueta(etiquetaIndex, 'etiqueta', value)} placeholder="Nombre de etiqueta" placeholderTextColor={estilos.font_sub_color} style={[styles.textInput, styles.inputEtiqueta, { fontFamily: estilos.font_normal, color: estilos.font_color, borderColor: estilos.cards_color_border }]} />
+                            <TouchableOpacity onPress={() => quitarEtiqueta(etiquetaIndex)}><Text style={{ color: estilos.font_sub_color, fontSize: 18 }}>✕</Text></TouchableOpacity>
+                        </View>
+                        {etiqueta.conceptos?.map((concepto, conceptoIndex) => (
+                            <TextInput key={`concepto-${etiquetaIndex}-${conceptoIndex}`} value={concepto} onChangeText={(value) => actualizarConcepto(etiquetaIndex, conceptoIndex, value)} placeholder="Concepto" placeholderTextColor={estilos.font_sub_color} style={[styles.textInput, { fontFamily: estilos.font_normal, color: estilos.font_color, borderColor: estilos.cards_color_border }]} />
                         ))}
                     </View>
-                )}
+                ))}
+                <TouchableOpacity onPress={agregarEtiqueta} style={styles.agregarEtiqueta}><Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_importe_color }}>+ AGREGAR ETIQUETA</Text></TouchableOpacity>
 
                 <TouchableOpacity
                     style={[styles.btn,
@@ -355,6 +465,7 @@ export default function RegistroMovimientoGasto({ navigation }){
                         REGISTRAR GASTO
                     </Text>
                 </TouchableOpacity>
+                </>}
 
             </ScrollView>
         </KeyboardAvoidingView>
@@ -377,6 +488,27 @@ const styles = StyleSheet.create({
     tituloSeccion: {
         fontSize: 16,
         marginBottom: 16,
+    },
+    subtitulo: {
+        fontSize: 15,
+        marginTop: 10,
+        marginBottom: 12,
+    },
+    ayuda: {
+        fontSize: 12,
+        lineHeight: 18,
+        marginBottom: 12,
+    },
+    loadingButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    preview: {
+        width: '100%',
+        height: 190,
+        marginBottom: 12,
+        borderRadius: 10,
     },
     label: {
         fontSize: 12,
@@ -401,6 +533,17 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'flex-start',
         gap: 8,
+    },
+    etiquetaCard: {
+        borderWidth: 1,
+        borderRadius: 10,
+        padding: 10,
+        marginBottom: 10,
+    },
+    agregarEtiqueta: {
+        alignItems: 'center',
+        paddingVertical: 10,
+        marginBottom: 8,
     },
     inputEtiqueta: {
         flex: 1,

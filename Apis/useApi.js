@@ -57,8 +57,18 @@ export const useApi = (contextActions) => {
           timeoutPromise,
         ]);
 
-        const data = await response.json();
+        const responseText = await response.text();
+        let data;
+        try {
+          data = responseText ? JSON.parse(responseText) : {};
+        } catch {
+          data = { message: responseText };
+        }
         const resp_correcta = [200, 201].includes(response.status);
+
+        if (!resp_correcta) {
+          console.error(`API ${response.status} ${method.toUpperCase()} ${endpoint}`, data);
+        }
 
         // Si el código es 401 o 403, cerramos sesión automáticamente
         if (response.status === 401 || response.status === 403) {
