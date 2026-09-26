@@ -27,6 +27,10 @@ export default function ListadoMovimientosGastos({ navigation }) {
   const { reiniciarvalores } = useContext(AuthContext);
   const [ready, setReady] = useState(false);
   const [query, setQuery] = useState('');
+  const fechaActual = new Date();
+  const [annoSeleccionado, setAnnoSeleccionado] = useState(String(fechaActual.getFullYear()));
+  const [mesSeleccionado, setMesSeleccionado] = useState(String(fechaActual.getMonth() + 1));
+  const [selectorPeriodo, setSelectorPeriodo] = useState(null);
   const [titulo,setTitulo]=useState('Movimientos gastos')
   const[estadonotificacion,setEstadonotificacion]=useState(false)
   const [bodynotificacion,setBodynotificacion]=useState({mensaje:'',
@@ -53,9 +57,32 @@ export default function ListadoMovimientosGastos({ navigation }) {
     boton_color_borde: colors.screen_componente_estilos.color_borde_botones,
   };
 
- const cargardatos = async () => {
+  const mostrarError = (mensaje) => {
+    setReady(true);
+    setBodynotificacion(prev => ({
+      ...prev,
+      titulo: 'MOVIMIENTOS GASTOS',
+      mensaje,
+      is_error: true,
+      valor_estado: '',
+    }));
+    setEstadonotificacion(true);
+  };
+
+ const cargardatos = async (anno = annoSeleccionado, mes = mesSeleccionado) => {
+  const annoNumero = Number(anno);
+  const mesNumero = Number(mes);
+  if (!Number.isInteger(annoNumero) || annoNumero < 2000 || annoNumero > 2100) {
+    mostrarError('Ingrese un año válido');
+    return;
+  }
+  if (!Number.isInteger(mesNumero) || mesNumero < 1 || mesNumero > 12) {
+    mostrarError('Ingrese un mes válido entre 1 y 12');
+    return;
+  }
+
   setReady(false);
-  const endpoint = `gastos-listados/movimientos-usuario`;
+  const endpoint = `gastos-listados/movimientos-usuario?anno=${annoNumero}&mes=${mesNumero}`;
 
   const result = await apiRequest(endpoint, 'GET', {});
   
@@ -99,6 +126,17 @@ export default function ListadoMovimientosGastos({ navigation }) {
   }
   actualizarEstadocomponente('recarga_movimientos_gastos', false);
   };
+
+  const cambiarPeriodo = () => {
+    setQuery('');
+    cargardatos();
+  };
+
+  const nombresMeses = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+  ];
+  const annosDisponibles = Array.from({ length: 7 }, (_, indice) => fechaActual.getFullYear() - 5 + indice);
 
 
 
@@ -174,6 +212,55 @@ export default function ListadoMovimientosGastos({ navigation }) {
           activar_busqueda={activar_busqueda}
           desactivar_busqueda={desactivar_busqueda}  
         />
+
+      <View style={styles.periodoBox}>
+        <Text style={[styles.periodoLabel, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>Período</Text>
+        <TouchableOpacity
+          onPress={() => setSelectorPeriodo(selectorPeriodo === 'anno' ? null : 'anno')}
+          style={[styles.periodoSelect, { backgroundColor: estilos.cards_color_fondo, borderColor: estilos.cards_color_border }]}
+        >
+          <Text style={{ fontFamily: estilos.font_normal, color: estilos.font_color }}>{annoSeleccionado}</Text>
+          <Text style={{ color: estilos.font_sub_color }}>▾</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setSelectorPeriodo(selectorPeriodo === 'mes' ? null : 'mes')}
+          style={[styles.periodoSelect, styles.mesSelect, { backgroundColor: estilos.cards_color_fondo, borderColor: estilos.cards_color_border }]}
+        >
+          <Text style={{ fontFamily: estilos.font_normal, color: estilos.font_color }}>{nombresMeses[Number(mesSeleccionado) - 1]}</Text>
+          <Text style={{ color: estilos.font_sub_color }}>▾</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={cambiarPeriodo}
+          style={[styles.periodoButton, { backgroundColor: estilos.boton_color_fondo, borderColor: estilos.boton_color_borde }]}
+        >
+          <Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_importe_color }}>CARGAR</Text>
+        </TouchableOpacity>
+      </View>
+
+      {selectorPeriodo && (
+        <View style={[styles.opcionesPeriodo, { backgroundColor: estilos.cards_color_fondo, borderColor: estilos.cards_color_border }]}> 
+          <Text style={[styles.opcionesTitulo, { fontFamily: estilos.font_negrita, color: estilos.font_color }]}>Seleccionar {selectorPeriodo === 'anno' ? 'año' : 'mes'}</Text>
+          <View style={styles.opcionesWrap}>
+            {(selectorPeriodo === 'anno' ? annosDisponibles : nombresMeses.map((nombre, indice) => ({ nombre, valor: indice + 1 }))).map((opcion) => {
+              const valor = selectorPeriodo === 'anno' ? opcion : opcion.valor;
+              const etiqueta = selectorPeriodo === 'anno' ? String(opcion) : opcion.nombre;
+              const seleccionado = (selectorPeriodo === 'anno' ? annoSeleccionado : mesSeleccionado) === String(valor);
+              return (
+                <TouchableOpacity
+                  key={String(valor)}
+                  onPress={() => {
+                    selectorPeriodo === 'anno' ? setAnnoSeleccionado(String(valor)) : setMesSeleccionado(String(valor));
+                    setSelectorPeriodo(null);
+                  }}
+                  style={[styles.opcionPeriodo, seleccionado && { backgroundColor: estilos.boton_color_fondo }]}
+                >
+                  <Text style={{ fontFamily: estilos.font_normal, color: estilos.font_color }}>{etiqueta}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
 
       {/* ═══ BUSCADOR ═══ */}
       {
@@ -311,6 +398,72 @@ const styles = StyleSheet.create({
   },
 
   // ═══ BUSCADOR ═══
+  periodoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 12,
+    marginBottom: 8,
+    gap: 8,
+  },
+  periodoLabel: {
+    fontSize: 12,
+  },
+  periodoInput: {
+    width: 78,
+    height: 36,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    textAlign: 'center',
+  },
+  mesInput: {
+    width: 54,
+  },
+  periodoSelect: {
+    minWidth: 92,
+    height: 36,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  mesSelect: {
+    minWidth: 116,
+  },
+  opcionesPeriodo: {
+    marginHorizontal: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+  },
+  opcionesTitulo: {
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  opcionesWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  opcionPeriodo: {
+    minWidth: 70,
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  periodoButton: {
+    height: 36,
+    paddingHorizontal: 12,
+    borderWidth: 0.5,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
