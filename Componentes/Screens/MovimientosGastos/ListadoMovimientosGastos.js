@@ -136,21 +136,19 @@ export default function ListadoMovimientosGastos({ navigation }) {
     }
     const termino = texto.toLowerCase().trim();
     const filtrados = dataegresos.filter((item) => {
-      const matchEmpresa = item.NombreEmpresa?.toLowerCase().includes(termino);
-      const matchGasto = item.DetalleGastos?.some((g) =>
-        g.NombreGasto?.toLowerCase().includes(termino)
-      );
-      const matchMedio = item.DetalleMediosPagos?.some((m) =>
-        m.NombreMedioPago?.toLowerCase().includes(termino)
-      );
-      return matchEmpresa || matchGasto || matchMedio;
+      const empresa = item.empresa?.nombre || '';
+      const fechaGasto = item.fecha_gasto || '';
+      const fechaRegistro = item.fecha_registro || '';
+      const numeroFactura = item.numero_factura || '';
+      return [empresa, fechaGasto, fechaRegistro, numeroFactura]
+        .some((valor) => String(valor).toLowerCase().includes(termino));
     });
     setDataegresosresult(filtrados);
   };
 
   // ── Totales dinámicos de la búsqueda activa ──
   const totalFiltrado = useMemo(() => {
-    return dataegresosresult.reduce((sum, item) => sum + (Number(item.TotalMovimiento) || 0), 0);
+    return dataegresosresult.reduce((sum, item) => sum + (Number(item.total_gasto) || 0), 0);
   }, [dataegresosresult]);
 
   const hayBusqueda = query.trim().length > 0;
@@ -194,7 +192,7 @@ export default function ListadoMovimientosGastos({ navigation }) {
           <TextInput
             value={query}
             onChangeText={buscarEgresos}
-            placeholder="Por empresa, concepto, medio pago..."
+            placeholder="Buscar por empresa o fecha..."
             underlineColorAndroid="transparent"
             placeholderTextColor={estilos.font_sub_color}
             style={{

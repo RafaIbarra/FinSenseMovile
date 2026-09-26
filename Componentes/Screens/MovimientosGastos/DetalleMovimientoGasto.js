@@ -90,9 +90,12 @@ export default function DetalleMovimientoGasto({ navigation }) {
     setReady(false)
     setTituloespera("Eliminando Movimiento..")
     
-    const endpoint = `operaciones/EliminarMovimientoGastoUser/${id_del}/` 
+    const endpoint = `gastos/${id_del}/` 
     const metodo = 'DELETE'
     const result = await apiRequest(endpoint, metodo, {});
+
+    console.log("result DELETE=> ", result)
+
     if (result.sessionExpired) {
         return; // Salimos de la función
       }

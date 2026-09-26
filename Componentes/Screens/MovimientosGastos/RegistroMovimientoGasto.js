@@ -1,6 +1,5 @@
 import React, { useState, useContext,useEffect } from 'react';
-import {
-    View, StyleSheet, Text, ScrollView, TouchableOpacity,
+import { View, StyleSheet, Text, ScrollView, TouchableOpacity,
     TextInput,KeyboardAvoidingView,Platform, Image, ActivityIndicator
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -25,16 +24,16 @@ export default function RegistroMovimientoGasto({ navigation }){
     const { reiniciarvalores } = useContext(AuthContext);
     const [estadonotificacion,setEstadonotificacion]=useState(false)
     const [bodynotificacion,setBodynotificacion]=useState({ mensaje:'',
-                                                          titulo:'',
-                                                          is_error:false,
-                                                          estado_actualizar:'',
-                                                          valor_estado:'',
-                                                          navnivel1:'',
-                                                          navnivel2:'',
-                                                          navnivel3:'',
-                                                          type:'funcion',
-                                                          funcion_name:actualizacion_registro_movimiento_gasto
-                                                        })
+                                                    titulo:'',
+                                                    is_error:false,
+                                                    estado_actualizar:'',
+                                                    valor_estado:'',
+                                                    navnivel1:'',
+                                                    navnivel2:'',
+                                                    navnivel3:'',
+                                                    type:'funcion',
+                                                    funcion_name:actualizacion_registro_movimiento_gasto
+                                                })
     const [titulo,setTitulo]=useState('')
 
     const apiRequest = useApi({ setActivarsesion, reiniciarvalores, actualizarEstadocomponente });
@@ -56,6 +55,43 @@ export default function RegistroMovimientoGasto({ navigation }){
     const [comprobante, setComprobante] = useState(null);
     const [payload, setPayload] = useState(null);
     const [extrayendo, setExtrayendo] = useState(false);
+    const [modoRegistro, setModoRegistro] = useState('asistido');
+
+    const crearPayloadManual = () => ({
+        id: 0,
+        factura: {
+            empresa: '',
+            rubro: '',
+            ruc_empresa: '',
+            fecha: '',
+            numero_factura: '',
+            total: '',
+            iva_diez: 0,
+            iva_cinco: 0,
+            fiabilidad: '',
+            detalle: [],
+            Model: '',
+            stats: null,
+            success_registro: true,
+            mensaje_error: '',
+            data_correct: true,
+        },
+        clasificacion: {
+            categoria: 'S/N',
+            etiquetas: [],
+            modelo_clasificador: '',
+            stats: null,
+        },
+        tipo_registro: 'Manual',
+        id_stas: 0,
+    });
+
+    const cambiarModoRegistro = (modo) => {
+        setModoRegistro(modo);
+        setComprobante(null);
+        setPayload(modo === 'manual' ? crearPayloadManual() : null);
+        setTitulo(modo === 'manual' ? 'Nuevo Movimiento Gasto Manual' : 'Nuevo Movimiento Gasto');
+    };
 
     const actualizarFactura = (campo, valor) => {
         setPayload(prev => ({
@@ -193,11 +229,13 @@ export default function RegistroMovimientoGasto({ navigation }){
     };
 
     const validarFormulario = () => {
-        if (!payload?.factura?.ruc_empresa?.trim()) return 'Ingrese el RUC de la empresa';
         if (!payload?.factura?.fecha?.trim()) return 'Ingrese la fecha del gasto';
-        if (!payload?.factura?.numero_factura?.trim()) return 'Ingrese el número de factura';
         if (payload?.factura?.total === '' || isNaN(Number(payload?.factura?.total))) return 'Ingrese un total de gasto válido';
-        if (!payload?.clasificacion?.categoria?.trim()) return 'Ingrese la categoría';
+        if (modoRegistro === 'asistido') {
+            if (!payload?.clasificacion?.categoria?.trim()) return 'Ingrese la categoría';
+            if (!payload?.factura?.ruc_empresa?.trim() || payload.factura.ruc_empresa.trim() === '0-0') return 'Ingrese el RUC de la empresa';
+            if (!payload?.factura?.numero_factura?.trim()) return 'Ingrese el número de factura';
+        }
         return null;
     };
 
@@ -213,11 +251,16 @@ export default function RegistroMovimientoGasto({ navigation }){
             ...payload,
             factura: {
                 ...payload.factura,
+                ruc_empresa: payload.factura.ruc_empresa?.trim() || '0-0',
                 total: Number(payload.factura.total) || 0,
                 iva_diez: Number(payload.factura.iva_diez) || 0,
                 iva_cinco: Number(payload.factura.iva_cinco) || 0,
             },
-            tipo_registro: payload.tipo_registro || 'Asistido',
+            clasificacion: {
+                ...payload.clasificacion,
+                categoria: payload.clasificacion.categoria?.trim() || 'S/N',
+            },
+            tipo_registro: modoRegistro === 'manual' ? 'Manual' : 'Asistido',
         };
 
         actualizarEstadocomponente('tituloloading', 'Registrando');
@@ -245,7 +288,8 @@ export default function RegistroMovimientoGasto({ navigation }){
             setEstadonotificacion(true)
         } else {
             setReady(true);
-        const msj = result.data?.message || 'Error en la solicitud';
+        console.error('Error gastos/registro:', result.data, 'Body enviado:', JSON.stringify(body, null, 2));
+        const msj = obtenerMensajeApi(result.data, `Error en la solicitud (${result.resp || 'desconocido'})`);
         setBodynotificacion(prevState => ({
           ...prevState,
           titulo:'REGISTRO GASTOS',
@@ -286,20 +330,35 @@ export default function RegistroMovimientoGasto({ navigation }){
         keyboardShouldPersistTaps="handled"
             >
 
-                <Text style={[styles.tituloSeccion, { fontFamily: estilos.font_negrita, color: estilos.font_color }]}>Registrar Gasto con comprobante</Text>
+                <Text style={[styles.tituloSeccion, { fontFamily: estilos.font_negrita, color: estilos.font_color }]}>Registrar gasto</Text>
 
-                <TouchableOpacity
+                <View style={[styles.selectorModo, { borderColor: estilos.cards_color_border }]}> 
+                    <TouchableOpacity
+                        style={[styles.opcionModo, modoRegistro === 'asistido' && { backgroundColor: estilos.boton_color_fondo }]}
+                        onPress={() => cambiarModoRegistro('asistido')}
+                    >
+                        <Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_color }}>Con comprobante</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.opcionModo, modoRegistro === 'manual' && { backgroundColor: estilos.boton_color_fondo }]}
+                        onPress={() => cambiarModoRegistro('manual')}
+                    >
+                        <Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_color }}>Manual</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {modoRegistro === 'asistido' && <TouchableOpacity
                     style={[styles.btn, { backgroundColor: estilos.boton_color_fondo, borderColor: estilos.boton_color_borde }]}
                     onPress={seleccionarComprobante}
                 >
                     <Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_importe_color }}>
                         {comprobante ? 'CAMBIAR COMPROBANTE' : 'SELECCIONAR COMPROBANTE'}
                     </Text>
-                </TouchableOpacity>
+                </TouchableOpacity>}
 
-                {comprobante?.uri && <Image source={{ uri: comprobante.uri }} style={styles.preview} resizeMode="contain" />}
+                {modoRegistro === 'asistido' && comprobante?.uri && <Image source={{ uri: comprobante.uri }} style={styles.preview} resizeMode="contain" />}
 
-                <TouchableOpacity
+                {modoRegistro === 'asistido' && <TouchableOpacity
                     style={[styles.btn, { backgroundColor: estilos.boton_color_fondo, borderColor: estilos.boton_color_borde, opacity: extrayendo ? 0.65 : 1 }]}
                     onPress={extraerClasificar}
                     disabled={extrayendo}
@@ -312,9 +371,11 @@ export default function RegistroMovimientoGasto({ navigation }){
                     ) : (
                         <Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_importe_color }}>EXTRAER Y CLASIFICAR</Text>
                     )}
-                </TouchableOpacity>
+                </TouchableOpacity>}
 
-                {!payload && <Text style={[styles.ayuda, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>Seleccione un comprobante y ejecute la extracción para editar los datos.</Text>}
+                {!payload && modoRegistro === 'asistido' && <Text style={[styles.ayuda, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>Seleccione un comprobante y ejecute la extracción para editar los datos.</Text>}
+
+                {modoRegistro === 'manual' && <Text style={[styles.ayuda, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>Complete los datos del gasto. El RUC y el número de factura son opcionales.</Text>}
 
                 {payload && <>
                 <Text style={[styles.subtitulo, { fontFamily: estilos.font_negrita, color: estilos.font_color }]}>Datos de la factura</Text>
@@ -493,6 +554,18 @@ const styles = StyleSheet.create({
         fontSize: 15,
         marginTop: 10,
         marginBottom: 12,
+    },
+    selectorModo: {
+        flexDirection: 'row',
+        borderWidth: 1,
+        borderRadius: 10,
+        marginBottom: 12,
+        overflow: 'hidden',
+    },
+    opcionModo: {
+        flex: 1,
+        alignItems: 'center',
+        paddingVertical: 12,
     },
     ayuda: {
         fontSize: 12,
