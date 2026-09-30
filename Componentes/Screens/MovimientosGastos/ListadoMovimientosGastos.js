@@ -90,7 +90,6 @@ export default function ListadoMovimientosGastos({ navigation }) {
   if (result.sessionExpired) return;
 
   if (result.resp_correcta) {
-    // ← AQUÍ: data es un array directo, no tiene .detalle
     
     const registros = Array.isArray(result.data.data_registro) ? result.data.data_registro : [];
 
@@ -136,7 +135,7 @@ export default function ListadoMovimientosGastos({ navigation }) {
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
   ];
-  const annosDisponibles = Array.from({ length: 7 }, (_, indice) => fechaActual.getFullYear() - 5 + indice);
+  const annosDisponibles = Array.from({ length: 7 }, (_, indice) => fechaActual.getFullYear() - 6 + indice);
 
 
 

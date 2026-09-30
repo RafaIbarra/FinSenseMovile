@@ -31,6 +31,7 @@ import Login from './Componentes/Screens/Login/Login';
 
 
 import ListadoMovimientosGastos from './Componentes/Screens/MovimientosGastos/ListadoMovimientosGastos';
+import InformeGastos from './Componentes/Screens/MovimientosGastos/InformeGastos';
 import DetalleMovimientoGasto from './Componentes/Screens/MovimientosGastos/DetalleMovimientoGasto';
 import RegistroMovimientoGasto from './Componentes/Screens/MovimientosGastos/RegistroMovimientoGasto';
 
@@ -67,7 +68,7 @@ import RegistroMovimientoGasto from './Componentes/Screens/MovimientosGastos/Reg
 // import DetalleIngreso from './Componentes/Screens/Ingresos/DetalleIngreso';
 // import RegistroIngreso from './Componentes/Screens/Ingresos/RegistroIngreso';
 
-// import ListadosGastos from './Componentes/Screens/Gastos/ListadosGastos';
+// import Listados from './Componentes/Screens/Gastos/ListadosGastos';
 // import RegistroGasto from './Componentes/Screens/Gastos/RegistroGasto';
 // import DetalleGasto from './Componentes/Screens/Gastos/DetalleGasto';
 
@@ -382,6 +383,33 @@ function TabsHome({ navigation }) {
               return <Text style={{ fontFamily:tipo_fuente,fontSize:estilos.label_size,color:text_color}}>{titulolabel}</Text>
             },
           headerShown: false 
+        }}
+      />
+      <Tab.Screen
+        name="InformeGastos"
+        component={InformeGastos}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <View style={styles.iconContainer}>
+              <MaterialCommunityIcons
+                name="chart-box-outline"
+                size={estilos.icon_size}
+                color={focused ? estilos.icon_color_active : estilos.icon_color_inactive}
+              />
+            </View>
+          ),
+          tabBarLabel: ({ focused }) => (
+            <Text
+              style={{
+                fontFamily: focused ? estilos.family_active : estilos.family_inactive,
+                fontSize: estilos.label_size,
+                color: focused ? estilos.text_color_active : estilos.text_color_inactive,
+              }}
+            >
+              Informes
+            </Text>
+          ),
+          headerShown: false,
         }}
       />
       {/* <Tab.Screen
