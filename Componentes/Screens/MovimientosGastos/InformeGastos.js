@@ -1,18 +1,16 @@
 import React, { useCallback, useContext, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { useFocusEffect, useTheme } from '@react-navigation/native';
 import { BarChart, PieChart } from 'react-native-chart-kit';
 import { AuthContext } from '../../../AuthContext';
 import { useApi } from '../../../Apis/useApi';
 import Esperando from '../../Procesando/Espera';
 
-const nombresMeses = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-];
-
 const coloresGrafico = ['#3AB884', '#E05C5C', '#5B9CF6', '#E8B84B', '#9B59B6', '#38C9B0'];
 const formatoGs = (valor) => `Gs. ${Number(valor || 0).toLocaleString('es-ES')}`;
+const formatoFechaISO = (fecha) => `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+const formatoFechaVisible = (fecha) => `${String(fecha.getDate()).padStart(2, '0')}/${String(fecha.getMonth() + 1).padStart(2, '0')}/${fecha.getFullYear()}`;
 
 export default function InformeGastos() {
   const { colors, fonts } = useTheme();
@@ -20,14 +18,18 @@ export default function InformeGastos() {
   const { setActivarsesion, reiniciarvalores, actualizarEstadocomponente } = useContext(AuthContext);
   const apiRequest = useApi({ setActivarsesion, reiniciarvalores, actualizarEstadocomponente });
   const fechaActual = new Date();
-  const [annoSeleccionado, setAnnoSeleccionado] = useState(String(fechaActual.getFullYear()));
-  const [mesSeleccionado, setMesSeleccionado] = useState(String(fechaActual.getMonth() + 1));
-  const [selectorPeriodo, setSelectorPeriodo] = useState(null);
+  const primerDiaMes = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), 1);
+  const ultimoDiaMes = new Date(fechaActual.getFullYear(), fechaActual.getMonth() + 1, 0);
+  const [desdeSeleccionado, setDesdeSeleccionado] = useState(primerDiaMes);
+  const [hastaSeleccionado, setHastaSeleccionado] = useState(ultimoDiaMes);
+  const [fechaActiva, setFechaActiva] = useState(null);
+  const [fechaTemporal, setFechaTemporal] = useState(primerDiaMes);
+  const [selectorFechaVisible, setSelectorFechaVisible] = useState(false);
   const [informe, setInforme] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
-  const periodoSeleccionadoRef = useRef({ anno: annoSeleccionado, mes: mesSeleccionado });
-  periodoSeleccionadoRef.current = { anno: annoSeleccionado, mes: mesSeleccionado };
+  const rangoSeleccionadoRef = useRef({ desde: primerDiaMes, hasta: ultimoDiaMes });
+  rangoSeleccionadoRef.current = { desde: desdeSeleccionado, hasta: hastaSeleccionado };
 
   const estilos = {
     fondo: colors.screen_componente_estilos.color_fondo,
@@ -53,11 +55,17 @@ export default function InformeGastos() {
     propsForBackgroundLines: { stroke: estilos.borde, strokeDasharray: '' },
   };
 
-  const cargarInforme = useCallback(async (anno, mes) => {
+  const cargarInforme = useCallback(async (desde, hasta) => {
+    const desdeParametro = formatoFechaISO(desde);
+    const hastaParametro = formatoFechaISO(hasta);
+    if (desdeParametro > hastaParametro) {
+      setError('La fecha desde no puede ser posterior a la fecha hasta.');
+      return;
+    }
     setCargando(true);
     setError('');
     const resultado = await apiRequest(
-      `gastos-listados/dashboard-usuario?anno=${Number(anno)}&mes=${Number(mes)}`,
+      `gastos-listados/dashboard-usuario?desde=${desdeParametro}&hasta=${hastaParametro}`,
       'GET',
       {},
     );
@@ -77,11 +85,101 @@ export default function InformeGastos() {
 
   useFocusEffect(
     useCallback(() => {
-      cargarInforme(periodoSeleccionadoRef.current.anno, periodoSeleccionadoRef.current.mes);
+      cargarInforme(rangoSeleccionadoRef.current.desde, rangoSeleccionadoRef.current.hasta);
     }, [cargarInforme]),
   );
 
-  const annosDisponibles = Array.from({ length: 7 }, (_, indice) => fechaActual.getFullYear() - 6 + indice);
+  const actualizarFecha = (tipo, fecha) => {
+    if (!fecha) return;
+    if (tipo === 'desde') setDesdeSeleccionado(fecha);
+    else setHastaSeleccionado(fecha);
+  };
+
+  const abrirSelectorFecha = (tipo) => {
+    const valorActual = tipo === 'desde' ? desdeSeleccionado : hastaSeleccionado;
+    const limites = tipo === 'desde'
+      ? { maximumDate: hastaSeleccionado }
+      : { minimumDate: desdeSeleccionado };
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        value: valorActual,
+        mode: 'date',
+        ...limites,
+        onChange: (evento, fecha) => {
+          if (evento.type === 'set' && fecha) actualizarFecha(tipo, fecha);
+        },
+      });
+      return;
+    }
+    setFechaActiva(tipo);
+    setFechaTemporal(valorActual);
+    setSelectorFechaVisible(true);
+  };
+
+  const cancelarSelectorFecha = () => {
+    setSelectorFechaVisible(false);
+    setFechaActiva(null);
+  };
+
+  const aplicarSelectorFecha = () => {
+    actualizarFecha(fechaActiva, fechaTemporal);
+    cancelarSelectorFecha();
+  };
+
+  const limitesSelectorFecha = fechaActiva === 'desde'
+    ? { maximumDate: hastaSeleccionado }
+    : { minimumDate: desdeSeleccionado };
+
+  const renderSelectorFecha = (tipo, fecha) => {
+    const etiqueta = tipo === 'desde' ? 'Desde' : 'Hasta';
+    const minimo = tipo === 'hasta' ? formatoFechaISO(desdeSeleccionado) : undefined;
+    const maximo = tipo === 'desde' ? formatoFechaISO(hastaSeleccionado) : undefined;
+    if (Platform.OS === 'web') {
+      return (
+        <View key={tipo} style={[styles.selector, { backgroundColor: estilos.card, borderColor: estilos.borde }]}>
+          <Text style={[styles.selectorLabel, { color: estilos.subtitulo, fontFamily: estilos.fuente }]}>{etiqueta}</Text>
+          {React.createElement('input', {
+            type: 'date',
+            value: formatoFechaISO(fecha),
+            min: minimo,
+            max: maximo,
+            'aria-label': `${etiqueta} del informe`,
+            onChange: (evento) => {
+              const valor = evento.target.value;
+              if (!valor) return;
+              const [anno, mes, dia] = valor.split('-').map(Number);
+              actualizarFecha(tipo, new Date(anno, mes - 1, dia));
+            },
+            style: {
+              boxSizing: 'border-box',
+              width: '100%',
+              padding: '4px 0',
+              border: 0,
+              outline: 'none',
+              backgroundColor: 'transparent',
+              color: estilos.texto,
+              fontFamily: estilos.fuenteNegrita,
+              fontSize: 12,
+            },
+          })}
+        </View>
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        key={tipo}
+        accessibilityRole="button"
+        accessibilityLabel={`Seleccionar fecha ${etiqueta.toLowerCase()} ${formatoFechaVisible(fecha)}`}
+        onPress={() => abrirSelectorFecha(tipo)}
+        style={[styles.selector, { backgroundColor: estilos.card, borderColor: estilos.borde }]}
+      >
+        <Text style={[styles.selectorLabel, { color: estilos.subtitulo, fontFamily: estilos.fuente }]}>{etiqueta}</Text>
+        <Text style={[styles.selectorValor, { color: estilos.texto, fontFamily: estilos.fuenteNegrita }]}>{formatoFechaVisible(fecha)}  ▾</Text>
+      </TouchableOpacity>
+    );
+  };
+
   const categoriasOrdenadas = (informe?.por_categoria || [])
     .filter((categoria) => Number(categoria.total_gasto) > 0)
     .sort((a, b) => Number(b.total_gasto) - Number(a.total_gasto));
@@ -137,60 +235,20 @@ export default function InformeGastos() {
   const totales = informe?.totales || {};
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: estilos.fondo }} contentContainerStyle={styles.contenido}>
-      <Text style={[styles.titulo, { color: estilos.texto, fontFamily: estilos.fuenteNegrita }]}>Informe de gastos</Text>
-      <View style={styles.periodoBox}>
-        <TouchableOpacity
-          accessibilityRole="button"
-          onPress={() => setSelectorPeriodo(selectorPeriodo === 'mes' ? null : 'mes')}
-          style={[styles.selector, { backgroundColor: estilos.card, borderColor: estilos.borde }]}
-        >
-          <Text style={[styles.selectorLabel, { color: estilos.subtitulo, fontFamily: estilos.fuente }]}>Mes</Text>
-          <Text style={[styles.selectorValor, { color: estilos.texto, fontFamily: estilos.fuenteNegrita }]}>{nombresMeses[Number(mesSeleccionado) - 1]}  ▾</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          accessibilityRole="button"
-          onPress={() => setSelectorPeriodo(selectorPeriodo === 'anno' ? null : 'anno')}
-          style={[styles.selector, { backgroundColor: estilos.card, borderColor: estilos.borde }]}
-        >
-          <Text style={[styles.selectorLabel, { color: estilos.subtitulo, fontFamily: estilos.fuente }]}>Año</Text>
-          <Text style={[styles.selectorValor, { color: estilos.texto, fontFamily: estilos.fuenteNegrita }]}>{annoSeleccionado}  ▾</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          accessibilityRole="button"
-          onPress={() => cargarInforme(annoSeleccionado, mesSeleccionado)}
-          style={[styles.botonCargar, { backgroundColor: estilos.boton, borderColor: estilos.borde }]}
-        >
-          <Text style={{ color: estilos.texto, fontFamily: estilos.fuenteNegrita }}>Ver</Text>
-        </TouchableOpacity>
-      </View>
-
-      {selectorPeriodo && (
-        <View style={[styles.opcionesPeriodo, { backgroundColor: estilos.card, borderColor: estilos.borde }]}>
-          <Text style={[styles.tituloSeccion, { color: estilos.texto, fontFamily: estilos.fuenteNegrita }]}>Seleccionar {selectorPeriodo === 'mes' ? 'mes' : 'año'}</Text>
-          <View style={styles.opcionesWrap}>
-            {(selectorPeriodo === 'mes'
-              ? nombresMeses.map((nombre, indice) => ({ etiqueta: nombre, valor: String(indice + 1) }))
-              : annosDisponibles.map((anno) => ({ etiqueta: String(anno), valor: String(anno) }))
-            ).map((opcion) => {
-              const seleccionado = (selectorPeriodo === 'mes' ? mesSeleccionado : annoSeleccionado) === opcion.valor;
-              return (
-                <TouchableOpacity
-                  key={opcion.valor}
-                  onPress={() => {
-                    if (selectorPeriodo === 'mes') setMesSeleccionado(opcion.valor);
-                    else setAnnoSeleccionado(opcion.valor);
-                    setSelectorPeriodo(null);
-                  }}
-                  style={[styles.opcionPeriodo, seleccionado && { backgroundColor: estilos.boton }]}
-                >
-                  <Text style={{ color: estilos.texto, fontFamily: seleccionado ? estilos.fuenteNegrita : estilos.fuente }}>{opcion.etiqueta}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+    <>
+      <ScrollView style={{ flex: 1, backgroundColor: estilos.fondo }} contentContainerStyle={styles.contenido}>
+        <Text style={[styles.titulo, { color: estilos.texto, fontFamily: estilos.fuenteNegrita }]}>Informe de gastos</Text>
+        <View style={styles.periodoBox}>
+          {renderSelectorFecha('desde', desdeSeleccionado)}
+          {renderSelectorFecha('hasta', hastaSeleccionado)}
+          <TouchableOpacity
+            accessibilityRole="button"
+            onPress={() => cargarInforme(desdeSeleccionado, hastaSeleccionado)}
+            style={[styles.botonCargar, { backgroundColor: estilos.boton, borderColor: estilos.borde }]}
+          >
+            <Text style={{ color: estilos.texto, fontFamily: estilos.fuenteNegrita }}>Ver</Text>
+          </TouchableOpacity>
         </View>
-      )}
 
       {error ? (
         <View style={[styles.mensajeError, { backgroundColor: estilos.card, borderColor: estilos.borde }]}>
@@ -288,7 +346,41 @@ export default function InformeGastos() {
           </View>
         </>
       )}
-    </ScrollView>
+      </ScrollView>
+      {Platform.OS === 'ios' && (
+        <Modal
+          transparent
+          visible={selectorFechaVisible}
+          animationType="fade"
+          onRequestClose={cancelarSelectorFecha}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.dateModal, { backgroundColor: estilos.card, borderColor: estilos.borde }]}>
+              <Text style={[styles.tituloSeccion, { color: estilos.texto, fontFamily: estilos.fuenteNegrita }]}>
+                Seleccionar fecha {fechaActiva === 'desde' ? 'desde' : 'hasta'}
+              </Text>
+              <DateTimePicker
+                value={fechaTemporal}
+                mode="date"
+                display="spinner"
+                {...limitesSelectorFecha}
+                onChange={(_, fecha) => {
+                  if (fecha) setFechaTemporal(fecha);
+                }}
+              />
+              <View style={styles.modalActions}>
+                <TouchableOpacity accessibilityRole="button" onPress={cancelarSelectorFecha} style={styles.modalButton}>
+                  <Text style={{ color: estilos.subtitulo, fontFamily: estilos.fuente }}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity accessibilityRole="button" onPress={aplicarSelectorFecha} style={styles.modalButton}>
+                  <Text style={{ color: estilos.importante, fontFamily: estilos.fuenteNegrita }}>Aplicar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+    </>
   );
 }
 
@@ -298,11 +390,12 @@ const styles = StyleSheet.create({
   periodoBox: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 12 },
   selector: { flex: 1, minWidth: 0, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
   selectorLabel: { fontSize: 11 },
-  selectorValor: { fontSize: 14, marginTop: 2 },
+  selectorValor: { fontSize: 12, marginTop: 2 },
   botonCargar: { height: 47, minWidth: 54, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: 8 },
-  opcionesPeriodo: { borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 12 },
-  opcionesWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
-  opcionPeriodo: { minWidth: 65, alignItems: 'center', paddingVertical: 8, paddingHorizontal: 9, borderRadius: 6 },
+  modalOverlay: { flex: 1, justifyContent: 'center', padding: 20, backgroundColor: 'rgba(0,0,0,0.4)' },
+  dateModal: { borderWidth: 1, borderRadius: 8, padding: 14 },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 18, marginTop: 8 },
+  modalButton: { paddingHorizontal: 8, paddingVertical: 10 },
   tarjetasTotales: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   tarjetaTotal: { width: '48%', flexGrow: 1, minHeight: 72, justifyContent: 'center', borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 },
   etiquetaTotal: { fontSize: 12, marginBottom: 4 },

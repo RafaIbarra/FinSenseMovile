@@ -82,7 +82,10 @@ export default function ListadoMovimientosGastos({ navigation }) {
   }
 
   setReady(false);
-  const endpoint = `gastos-listados/movimientos-usuario?anno=${annoNumero}&mes=${mesNumero}`;
+  const desde = `${annoNumero}-${String(mesNumero).padStart(2, '0')}-01`;
+  const ultimoDia = new Date(annoNumero, mesNumero, 0).getDate();
+  const hasta = `${annoNumero}-${String(mesNumero).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+  const endpoint = `gastos-listados/movimientos-usuario?desde=${desde}&hasta=${hasta}`;
 
   const result = await apiRequest(endpoint, 'GET', {});
   
