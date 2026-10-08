@@ -84,6 +84,7 @@ import RegistroMovimientoGasto from './Componentes/Screens/MovimientosGastos/Reg
 // import RecorridoConceptoIngreso from './Componentes/Screens/Recorrido/RecorridoConceptoIngreso';
 // import RecorridoMedioPago from './Componentes/Screens/Recorrido/RecorridoMedioPago';
 import SeleccionTema from './Componentes/Screens/Configuracion/SeleccionTema';
+import MediosPago from './Componentes/Screens/Configuracion/MediosPago';
 
 //////////////iconos///////////////////////////////
 import { Ionicons } from "@expo/vector-icons";
@@ -180,6 +181,22 @@ function DrawerInicio({navigation}) {
           
           }}
       />
+
+        <DrawerNav.Screen
+          name="Medios de pago"
+          component={MediosPago}
+          options={{
+            drawerLabel: ({ focused }) => (
+              <View style={{ height: div_heigth, alignContent: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontFamily: focused ? fonts.balsamiqbold.fontFamily : fonts.balsamiqregular.fontFamily, color: color_texto }}>
+                  Medios de pago
+                </Text>
+              </View>
+            ),
+            drawerIcon: () => <MaterialCommunityIcons name="credit-card-outline" size={sizeicon} color={color_icono} />,
+            drawerItemStyle: { borderBottomWidth: 1, borderBottomColor: color_linea, marginBottom: 5 },
+          }}
+        />
 
       {/* <DrawerNav.Screen name="RootNavigator" 
         component={RootNavigator}

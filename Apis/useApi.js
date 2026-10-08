@@ -21,6 +21,7 @@ export const useApi = (contextActions) => {
       const sesion = storageData?.sesion;
 
       const isFormData = body instanceof FormData;
+      const isUrlEncoded = body instanceof URLSearchParams;
 
       const headers = {
         Authorization: `Bearer ${token}`,
@@ -33,6 +34,8 @@ export const useApi = (contextActions) => {
         if (isFormData) {
           // No establecer Content-Type para FormData (fetch lo completa con boundary)
           // No se hace nada con headers['Content-Type']
+        } else if (isUrlEncoded) {
+          headers['Content-Type'] = 'application/x-www-form-urlencoded';
         } else {
           headers['Content-Type'] = 'application/json';
         }
@@ -43,7 +46,7 @@ export const useApi = (contextActions) => {
         headers,
         // body: method.toUpperCase() !== 'GET' ? JSON.stringify(body) : undefined,
          body: method.toUpperCase() !== 'GET'
-          ? (isFormData ? body : JSON.stringify(body))
+          ? (isFormData ? body : isUrlEncoded ? body.toString() : JSON.stringify(body))
           : undefined,
       };
       

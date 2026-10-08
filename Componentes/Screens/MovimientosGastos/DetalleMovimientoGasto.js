@@ -20,6 +20,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AntDesign } from '@expo/vector-icons';
 
+const obtenerNombreMedioPago = (medio) => {
+  const nombres = [
+    medio.TipoMedioPago?.NombreTipo,
+    medio.EntidadUsuario?.NombreEntidad,
+    medio.MarcaTarjeta?.NombreMarca,
+  ].filter(Boolean);
+  const canal = medio.CanalPago?.NombreCanal || medio.CanalPago?.Nombre || (typeof medio.CanalPago === 'string' ? medio.CanalPago : '');
+  return nombres.join(' · ') || canal || 'Otro medio de pago';
+};
+
 
 
 export default function DetalleMovimientoGasto({ navigation }) {
@@ -143,6 +153,8 @@ export default function DetalleMovimientoGasto({ navigation }) {
           
   }, [confirmaciondelete]);
   const tieneComprobante = Array.isArray(datositem.imagenes) && datositem.imagenes.length > 0;
+  const mediosPago = Array.isArray(datositem.medios_pagos) ? datositem.medios_pagos : [];
+  const rucEmpresa = datositem.empresa?.ruc || datositem.ruc_empresa;
 
   if (!ready) return <Esperando titulo={tituloespera}/>;
 
@@ -324,22 +336,43 @@ export default function DetalleMovimientoGasto({ navigation }) {
                 {datositem.tipo_registro}
               </Text>
             </View>
-            <View style={[styles.cardRow, styles.cardRowBorder]}>
-              <Text style={[styles.cardRowLabel, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto_subtitulo }]}>
-                Modelo extracción
-              </Text>
-              <Text style={[styles.cardRowAmount, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto }]}>
-                {datositem.modelo_extraccion_datos}
-              </Text>
+            {!!rucEmpresa && (
+              <View style={[styles.cardRow, styles.cardRowBorder]}>
+                <Text style={[styles.cardRowLabel, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto_subtitulo }]}>RUC empresa</Text>
+                <Text style={[styles.cardRowAmount, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto }]}>{rucEmpresa}</Text>
+              </View>
+            )}
+            <View style={[styles.cardRow, styles.cardRowBorder, { alignItems: 'flex-start' }]}>
+              <Text style={[styles.cardRowLabel, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto_subtitulo }]}>Medio de pago</Text>
+              {mediosPago.length ? (
+                <View style={styles.extraMediosPago}>
+                  {mediosPago.map((medio, indice) => (
+                    <View key={medio.Id ?? medio.id_medio ?? indice} style={[styles.extraMedioPago, indice > 0 && styles.cardRowBorder, indice > 0 && { borderTopColor: colors.screen_componente_estilos.color_borde_cards }]}>
+                      <Text style={[styles.cardRowAmount, styles.extraMedioNombre, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto }]}>
+                        {obtenerNombreMedioPago(medio)}
+                      </Text>
+                      <Text style={[styles.cardRowAmount, { fontFamily: fonts.balsamiqbold.fontFamily,color: colors.screen_componente_estilos.color_texto_importante }]}>
+                        Gs. {Number(medio.MontoMedio ?? medio.monto_medio ?? 0).toLocaleString('es-ES')}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={[styles.cardRowAmount, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto }]}>Sin medio registrado</Text>
+              )}
             </View>
-            <View style={[styles.cardRow, styles.cardRowBorder]}>
-              <Text style={[styles.cardRowLabel, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto_subtitulo }]}>
-                Modelo clasificador
-              </Text>
-              <Text style={[styles.cardRowAmount, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto }]}>
-                {datositem.modelo_clasificador}
-              </Text>
-            </View>
+            {!!datositem.modelo_extraccion_datos && (
+              <View style={[styles.cardRow, styles.cardRowBorder]}>
+                <Text style={[styles.cardRowLabel, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto_subtitulo }]}>Modelo extracción</Text>
+                <Text style={[styles.cardRowAmount, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto }]}>{datositem.modelo_extraccion_datos}</Text>
+              </View>
+            )}
+            {!!datositem.modelo_clasificador && (
+              <View style={[styles.cardRow, styles.cardRowBorder]}>
+                <Text style={[styles.cardRowLabel, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto_subtitulo }]}>Modelo clasificador</Text>
+                <Text style={[styles.cardRowAmount, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto }]}>{datositem.modelo_clasificador}</Text>
+              </View>
+            )}
           </View>
 
         </View>
@@ -518,6 +551,21 @@ const styles = StyleSheet.create({
   cardRowAmount: {
     fontSize: 13,
     //color: '#ffffff',
+  },
+  extraMediosPago: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  extraMedioPago: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  extraMedioNombre: {
+    flex: 1,
+    flexShrink: 1,
   },
 
   // ── ETIQUETAS (chips) ─────────────────────────────

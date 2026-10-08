@@ -17,7 +17,6 @@ export default function RegistroMovimientoGasto({ navigation }){
     const { colors, fonts } = useTheme();
     const { navigate } = useNavigation();
     const { estadocomponente, actualizarEstadocomponente } = useContext(AuthContext);
-    const { asignar_opciones_alerta } = useContext(AuthContext);
     const [ready, setReady] = useState(false);
     const { actualizacion_registro_movimiento_gasto } = useContext(AuthContext);
     const { activarsesion, setActivarsesion } = useContext(AuthContext);
@@ -56,6 +55,88 @@ export default function RegistroMovimientoGasto({ navigation }){
     const [payload, setPayload] = useState(null);
     const [extrayendo, setExtrayendo] = useState(false);
     const [modoRegistro, setModoRegistro] = useState('asistido');
+    const [mediosPagoDisponibles, setMediosPagoDisponibles] = useState([]);
+    const [mediosPago, setMediosPago] = useState([]);
+    const [medioPagoAbierto, setMedioPagoAbierto] = useState(null);
+    const [empresasUsuario, setEmpresasUsuario] = useState([]);
+    const [empresaSeleccionadaId, setEmpresaSeleccionadaId] = useState(null);
+    const [empresasAbiertas, setEmpresasAbiertas] = useState(false);
+    const [busquedaEmpresa, setBusquedaEmpresa] = useState('');
+    const [empresaPersonalizada, setEmpresaPersonalizada] = useState(false);
+    const [cargandoEmpresas, setCargandoEmpresas] = useState(false);
+    const [errorEmpresas, setErrorEmpresas] = useState('');
+
+    const empresasFiltradas = empresasUsuario.filter(empresa => {
+        const busqueda = busquedaEmpresa.trim().toLowerCase();
+        if (!busqueda) return true;
+        return [empresa.NombreEmpresa, empresa.Rubro, empresa.Ruc]
+            .some(valor => String(valor || '').toLowerCase().includes(busqueda));
+    });
+
+    const cargarMediosPago = async () => {
+        const result = await apiRequest('medios-pagos-usuarios/listar', 'GET', {});
+        if (result.sessionExpired) return;
+        if (result.resp_correcta && Array.isArray(result.data)) {
+            setMediosPagoDisponibles(result.data.filter(medio => medio.IsActive));
+            return;
+        }
+        mostrarError(obtenerMensajeApi(result.data, 'No se pudieron cargar los medios de pago'));
+    };
+
+    const cargarEmpresasUsuario = async () => {
+        setCargandoEmpresas(true);
+        setErrorEmpresas('');
+        const result = await apiRequest('empresas/empresas-usuario', 'GET', {});
+        setCargandoEmpresas(false);
+        if (result.sessionExpired) return;
+        if (result.resp_correcta && Array.isArray(result.data)) {
+            setEmpresasUsuario(result.data);
+            return;
+        }
+        setErrorEmpresas(obtenerMensajeApi(result.data, 'No se pudieron cargar las empresas'));
+    };
+
+    const seleccionarEmpresa = (empresa) => {
+        setEmpresaSeleccionadaId(String(empresa.Id));
+        setEmpresaPersonalizada(false);
+        setEmpresasAbiertas(false);
+        setBusquedaEmpresa('');
+        setPayload(prev => ({
+            ...prev,
+            factura: {
+                ...prev.factura,
+                empresa: empresa.NombreEmpresa || '',
+                rubro: empresa.Rubro || '',
+                ruc_empresa: empresa.Ruc || '',
+            },
+        }));
+    };
+
+    const seleccionarEmpresaPersonalizada = () => {
+        setEmpresaSeleccionadaId('otra');
+        setEmpresaPersonalizada(true);
+        setEmpresasAbiertas(false);
+        setBusquedaEmpresa('');
+        setPayload(prev => ({
+            ...prev,
+            factura: { ...prev.factura, empresa: '', rubro: '', ruc_empresa: '' },
+        }));
+    };
+
+    const actualizarMedioPago = (indice, campo, valor) => {
+        setMediosPago(prev => prev.map((medio, index) => (
+            index === indice ? { ...medio, [campo]: valor } : medio
+        )));
+    };
+
+    const agregarMedioPago = () => {
+        setMediosPago(prev => [...prev, { id_medio: '', monto_medio: '' }]);
+    };
+
+    const quitarMedioPago = (indice) => {
+        setMediosPago(prev => prev.filter((_, index) => index !== indice));
+        setMedioPagoAbierto(null);
+    };
 
     const crearPayloadManual = () => ({
         id: 0,
@@ -84,12 +165,18 @@ export default function RegistroMovimientoGasto({ navigation }){
         },
         tipo_registro: 'Manual',
         id_stas: 0,
+        medio_pago: [],
     });
 
     const cambiarModoRegistro = (modo) => {
         setModoRegistro(modo);
         setComprobante(null);
         setPayload(modo === 'manual' ? crearPayloadManual() : null);
+        setMediosPago([]);
+        setEmpresaSeleccionadaId(null);
+        setEmpresaPersonalizada(false);
+        setEmpresasAbiertas(false);
+        setBusquedaEmpresa('');
         setTitulo(modo === 'manual' ? 'Nuevo Movimiento Gasto Manual' : 'Nuevo Movimiento Gasto');
     };
 
@@ -169,7 +256,8 @@ export default function RegistroMovimientoGasto({ navigation }){
 
             if (result.sessionExpired) return;
             if (result.resp_correcta && result.data) {
-                setPayload(result.data);
+                setPayload({ ...result.data, medio_pago: [] });
+                setMediosPago([]);
                 setTitulo('Editar movimiento gasto');
                 return;
             }
@@ -228,13 +316,27 @@ export default function RegistroMovimientoGasto({ navigation }){
         }));
     };
 
+    const esRucIndefinido = (ruc) => !ruc?.trim() || ruc.trim() === '0-0';
+
     const validarFormulario = () => {
         if (!payload?.factura?.fecha?.trim()) return 'Ingrese la fecha del gasto';
         if (payload?.factura?.total === '' || isNaN(Number(payload?.factura?.total))) return 'Ingrese un total de gasto válido';
+        if (mediosPago.length > 0) {
+            if (mediosPago.some(medio => !medio.id_medio || !Number.isFinite(Number(medio.monto_medio)) || Number(medio.monto_medio) <= 0)) {
+                return 'Seleccione un medio de pago e ingrese un monto válido para cada uno';
+            }
+            
+        }
         if (modoRegistro === 'asistido') {
             if (!payload?.clasificacion?.categoria?.trim()) return 'Ingrese la categoría';
             if (!payload?.factura?.ruc_empresa?.trim() || payload.factura.ruc_empresa.trim() === '0-0') return 'Ingrese el RUC de la empresa';
             if (!payload?.factura?.numero_factura?.trim()) return 'Ingrese el número de factura';
+        } else if (empresaPersonalizada && esRucIndefinido(payload?.factura?.ruc_empresa)) {
+            return 'Ingrese el RUC de la empresa';
+        } else if (empresaPersonalizada && !payload?.factura?.empresa?.trim()) {
+            return 'Ingrese el nombre de la empresa';
+        } else if (!empresaPersonalizada && !payload?.factura?.empresa?.trim()) {
+            return 'Seleccione o ingrese una empresa';
         }
         return null;
     };
@@ -242,8 +344,7 @@ export default function RegistroMovimientoGasto({ navigation }){
     const registrar_gasto = async () => {
         const error = validarFormulario();
         if (error) {
-            asignar_opciones_alerta(true, 'ERROR', error, 'Gastos', 'bandera_registro_gasto', false);
-            actualizarEstadocomponente('alerta_estado', true);
+            mostrarError(error);
             return;
         }
 
@@ -261,8 +362,14 @@ export default function RegistroMovimientoGasto({ navigation }){
                 categoria: payload.clasificacion.categoria?.trim() || 'S/N',
             },
             tipo_registro: modoRegistro === 'manual' ? 'Manual' : 'Asistido',
+            medio_pago: mediosPago.map(medio => ({
+                id_medio: Number(medio.id_medio),
+                monto_medio: Number(medio.monto_medio),
+            })),
         };
 
+        console.log("body => ", body);
+        
         actualizarEstadocomponente('tituloloading', 'Registrando');
         actualizarEstadocomponente('loading', true);
 
@@ -301,9 +408,16 @@ export default function RegistroMovimientoGasto({ navigation }){
         }
     };
     useEffect(() => {
+        if (modoRegistro !== 'manual' || !payload || empresaSeleccionadaId || payload.factura.empresa?.trim()) return;
+        const empresaIndefinida = empresasUsuario.find(empresa => empresa.NombreEmpresa?.trim().toLowerCase() === 'indefinido');
+        if (empresaIndefinida) seleccionarEmpresa(empresaIndefinida);
+    }, [empresasUsuario, modoRegistro, payload, empresaSeleccionadaId]);
+
+    useEffect(() => {
         setTitulo('Nuevo Movimiento Gasto')
         setReady(true)
-    
+        cargarMediosPago();
+        cargarEmpresasUsuario();
   }, []);
     const onOk=()=>{
     setEstadonotificacion(false)
@@ -380,20 +494,28 @@ export default function RegistroMovimientoGasto({ navigation }){
                 {payload && <>
                 <Text style={[styles.subtitulo, { fontFamily: estilos.font_negrita, color: estilos.font_color }]}>Datos de la factura</Text>
 
-                <Text style={[styles.label, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>
-                    RUC Empresa
-                </Text>
-                <TextInput
-                    value={payload.factura.ruc_empresa || ''}
-                    onChangeText={(value) => actualizarFactura('ruc_empresa', value)}
-                    placeholder="0-0"
-                    placeholderTextColor={estilos.font_sub_color}
-                    style={[styles.textInput, {
-                        fontFamily: estilos.font_normal,
-                        color: estilos.font_color,
-                        borderColor: estilos.cards_color_border,
-                    }]}
-                />
+                {(modoRegistro !== 'manual' || empresaPersonalizada) && <>
+                    <Text style={[styles.label, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>RUC Empresa</Text>
+                    <TextInput
+                        value={payload.factura.ruc_empresa || ''}
+                        onChangeText={(value) => actualizarFactura('ruc_empresa', value)}
+                        placeholder="0-0"
+                        placeholderTextColor={estilos.font_sub_color}
+                        style={[styles.textInput, {
+                            fontFamily: estilos.font_normal,
+                            color: estilos.font_color,
+                            borderColor: estilos.cards_color_border,
+                        }]}
+                    />
+                </>}
+                {modoRegistro === 'manual' && !empresaPersonalizada && (
+                    <>
+                        <Text style={[styles.label, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>RUC Empresa</Text>
+                        <Text style={[styles.valorEmpresa, { fontFamily: estilos.font_normal, color: estilos.font_color }]}>
+                            {payload.factura.ruc_empresa || 'Seleccione una empresa'}
+                        </Text>
+                    </>
+                )}
 
                 <Text style={[styles.label, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>
                     Fecha (AAAA-MM-DD)
@@ -494,13 +616,97 @@ export default function RegistroMovimientoGasto({ navigation }){
                 />
 
                 <Text style={[styles.label, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>Empresa</Text>
-                <TextInput value={payload.factura.empresa || ''} onChangeText={(value) => actualizarFactura('empresa', value)} placeholder="Empresa" placeholderTextColor={estilos.font_sub_color} style={[styles.textInput, { fontFamily: estilos.font_normal, color: estilos.font_color, borderColor: estilos.cards_color_border }]} />
+                {modoRegistro === 'manual' ? (
+                    <>
+                        {!empresaPersonalizada && (
+                            <>
+                                <TouchableOpacity
+                                    style={[styles.selectorEmpresa, { borderColor: estilos.cards_color_border }]}
+                                    onPress={() => {
+                                        setEmpresasAbiertas(!empresasAbiertas);
+                                        setBusquedaEmpresa('');
+                                    }}
+                                >
+                                    <Text style={{ fontFamily: estilos.font_normal, color: estilos.font_color }}>
+                                        {payload.factura.empresa || (cargandoEmpresas ? 'Cargando empresas...' : 'Seleccione una empresa')}
+                                    </Text>
+                                </TouchableOpacity>
+                                {empresasAbiertas && (
+                                    <View style={[styles.listaEmpresas, { borderColor: estilos.cards_color_border }]}>
+                                        <TextInput
+                                            value={busquedaEmpresa}
+                                            onChangeText={setBusquedaEmpresa}
+                                            placeholder="Buscar por nombre, rubro o RUC"
+                                            placeholderTextColor={estilos.font_sub_color}
+                                            style={[styles.busquedaEmpresa, {
+                                                fontFamily: estilos.font_normal,
+                                                color: estilos.font_color,
+                                                borderColor: estilos.cards_color_border,
+                                            }]}
+                                        />
+                                        {empresasFiltradas.map(empresa => (
+                                            <TouchableOpacity
+                                                key={empresa.Id}
+                                                style={[styles.opcionEmpresa, { borderColor: estilos.cards_color_border }]}
+                                                onPress={() => seleccionarEmpresa(empresa)}
+                                            >
+                                                <Text style={{ fontFamily: estilos.font_normal, color: estilos.font_color }}>{empresa.NombreEmpresa}</Text>
+                                                {!!empresa.Ruc && <Text style={{ fontFamily: estilos.font_normal, color: estilos.font_sub_color, fontSize: 12 }}>{empresa.Ruc}</Text>}
+                                            </TouchableOpacity>
+                                        ))}
+                                        {empresasFiltradas.length === 0 && (
+                                            <Text style={[styles.sinEmpresas, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>No hay empresas que coincidan.</Text>
+                                        )}
+                                        <TouchableOpacity
+                                            style={[styles.opcionEmpresa, { borderColor: estilos.cards_color_border }]}
+                                            onPress={seleccionarEmpresaPersonalizada}
+                                        >
+                                            <Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_importe_color }}>Otra empresa (no está en la lista)</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                                {errorEmpresas ? <Text style={[styles.ayuda, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>{errorEmpresas}</Text> : null}
+                                {!empresasAbiertas && (
+                                    <TouchableOpacity onPress={seleccionarEmpresaPersonalizada} style={styles.otraEmpresa}>
+                                        <Text style={{ fontFamily: estilos.font_normal, color: estilos.font_importe_color }}>+ Otra empresa</Text>
+                                    </TouchableOpacity>
+                                )}
+                                {!!payload.factura.rubro && <Text style={[styles.valorEmpresa, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>{payload.factura.rubro}</Text>}
+                            </>
+                        )}
+                        {empresaPersonalizada && (
+                            <>
+                                <TextInput
+                                    value={payload.factura.empresa || ''}
+                                    onChangeText={(value) => actualizarFactura('empresa', value)}
+                                    placeholder="Nombre de empresa"
+                                    placeholderTextColor={estilos.font_sub_color}
+                                    style={[styles.textInput, { fontFamily: estilos.font_normal, color: estilos.font_color, borderColor: estilos.cards_color_border }]}
+                                />
+                                <TouchableOpacity onPress={() => {
+                                    setEmpresaPersonalizada(false);
+                                    setEmpresaSeleccionadaId(null);
+                                    setPayload(prev => ({
+                                        ...prev,
+                                        factura: { ...prev.factura, empresa: '', rubro: '', ruc_empresa: '' },
+                                    }));
+                                }} style={styles.otraEmpresa}>
+                                    <Text style={{ fontFamily: estilos.font_normal, color: estilos.font_importe_color }}>Elegir de la lista</Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
+                    </>
+                ) : (
+                    <TextInput value={payload.factura.empresa || ''} onChangeText={(value) => actualizarFactura('empresa', value)} placeholder="Empresa" placeholderTextColor={estilos.font_sub_color} style={[styles.textInput, { fontFamily: estilos.font_normal, color: estilos.font_color, borderColor: estilos.cards_color_border }]} />
+                )}
 
-                <Text style={[styles.label, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>Rubro</Text>
-                <TextInput value={payload.factura.rubro || ''} onChangeText={(value) => actualizarFactura('rubro', value)} placeholder="Rubro" placeholderTextColor={estilos.font_sub_color} style={[styles.textInput, { fontFamily: estilos.font_normal, color: estilos.font_color, borderColor: estilos.cards_color_border }]} />
+                {(modoRegistro !== 'manual' || empresaPersonalizada) && <>
+                    <Text style={[styles.label, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>Rubro</Text>
+                    <TextInput value={payload.factura.rubro || ''} onChangeText={(value) => actualizarFactura('rubro', value)} placeholder="Rubro" placeholderTextColor={estilos.font_sub_color} style={[styles.textInput, { fontFamily: estilos.font_normal, color: estilos.font_color, borderColor: estilos.cards_color_border }]} />
+                </>}
 
                 {/* ── Etiquetas y conceptos ── */}
-                <Text style={[styles.label, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>
+                {/* <Text style={[styles.label, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>
                     Etiquetas y conceptos
                 </Text>
                 {payload.clasificacion.etiquetas?.map((etiqueta, etiquetaIndex) => (
@@ -514,7 +720,69 @@ export default function RegistroMovimientoGasto({ navigation }){
                         ))}
                     </View>
                 ))}
-                <TouchableOpacity onPress={agregarEtiqueta} style={styles.agregarEtiqueta}><Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_importe_color }}>+ AGREGAR ETIQUETA</Text></TouchableOpacity>
+                <TouchableOpacity onPress={agregarEtiqueta} style={styles.agregarEtiqueta}><Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_importe_color }}>+ AGREGAR ETIQUETA</Text></TouchableOpacity> */}
+
+                <Text style={[styles.subtitulo, { fontFamily: estilos.font_negrita, color: estilos.font_color }]}>Medios de pago</Text>
+                {mediosPagoDisponibles.length === 0 ? (
+                    <Text style={[styles.ayuda, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>
+                        No hay medios de pago activos. Configure uno desde el menú.
+                    </Text>
+                ) : mediosPago.length === 0 ? (
+                    <Text style={[styles.ayuda, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>
+                        Opcional. Puede registrar el gasto sin asignar un medio de pago.
+                    </Text>
+                ) : mediosPago.map((medio, indice) => {
+                    const medioSeleccionado = mediosPagoDisponibles.find(opcion => String(opcion.Id) === String(medio.id_medio));
+                    const nombreMedio = medioSeleccionado
+                        ? [medioSeleccionado.TipoMedioPago?.NombreTipo, medioSeleccionado.EntidadUsuario?.NombreEntidad, medioSeleccionado.MarcaTarjeta?.NombreMarca].filter(Boolean).join(' · ')
+                        : 'Seleccione un medio de pago';
+
+                    return (
+                        <View key={`medio-pago-${indice}`} style={[styles.etiquetaCard, { backgroundColor: estilos.cards_color_fondo, borderColor: estilos.cards_color_border }]}>
+                            <View style={styles.filaEtiqueta}>
+                                <TouchableOpacity
+                                    style={[styles.selectorMedioPago, { borderColor: estilos.cards_color_border }]}
+                                    onPress={() => setMedioPagoAbierto(medioPagoAbierto === indice ? null : indice)}
+                                >
+                                    <Text style={{ fontFamily: estilos.font_normal, color: estilos.font_color }}>{nombreMedio}</Text>
+                                </TouchableOpacity>
+                                {mediosPago.length > 1 && (
+                                    <TouchableOpacity onPress={() => quitarMedioPago(indice)}>
+                                        <Text style={{ color: estilos.font_sub_color, fontSize: 18 }}>✕</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                            {medioPagoAbierto === indice && mediosPagoDisponibles.map(opcion => {
+                                const nombreOpcion = [opcion.TipoMedioPago?.NombreTipo, opcion.EntidadUsuario?.NombreEntidad, opcion.MarcaTarjeta?.NombreMarca].filter(Boolean).join(' · ');
+                                return (
+                                    <TouchableOpacity
+                                        key={opcion.Id}
+                                        style={[styles.opcionMedioPago, { borderColor: estilos.cards_color_border }]}
+                                        onPress={() => {
+                                            actualizarMedioPago(indice, 'id_medio', opcion.Id);
+                                            setMedioPagoAbierto(null);
+                                        }}
+                                    >
+                                        <Text style={{ fontFamily: estilos.font_normal, color: estilos.font_color }}>{nombreOpcion}</Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                            <TextInput
+                                value={String(medio.monto_medio)}
+                                onChangeText={valor => actualizarMedioPago(indice, 'monto_medio', valor)}
+                                keyboardType="numeric"
+                                placeholder="Monto aplicado"
+                                placeholderTextColor={estilos.font_sub_color}
+                                style={[styles.textInput, { fontFamily: estilos.font_normal, color: estilos.font_color, borderColor: estilos.cards_color_border, marginTop: 10, marginBottom: 0 }]}
+                            />
+                        </View>
+                    );
+                })}
+                {mediosPagoDisponibles.length > 0 && (
+                    <TouchableOpacity onPress={agregarMedioPago} style={styles.agregarEtiqueta}>
+                        <Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_importe_color }}>+ AGREGAR MEDIO DE PAGO</Text>
+                    </TouchableOpacity>
+                )}
 
                 <TouchableOpacity
                     style={[styles.btn,
@@ -620,6 +888,62 @@ const styles = StyleSheet.create({
     },
     inputEtiqueta: {
         flex: 1,
+    },
+    selectorMedioPago: {
+        flex: 1,
+        minHeight: 42,
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderRadius: 10,
+        paddingHorizontal: 12,
+    },
+    selectorEmpresa: {
+        minHeight: 42,
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        marginBottom: 8,
+    },
+    listaEmpresas: {
+        borderWidth: 1,
+        borderRadius: 8,
+        marginBottom: 8,
+        overflow: 'hidden',
+    },
+    busquedaEmpresa: {
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingVertical: 9,
+        paddingHorizontal: 10,
+        margin: 8,
+        fontSize: 14,
+    },
+    sinEmpresas: {
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        fontSize: 13,
+    },
+    opcionEmpresa: {
+        minHeight: 44,
+        justifyContent: 'center',
+        borderBottomWidth: 1,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+    },
+    valorEmpresa: {
+        marginBottom: 12,
+        fontSize: 13,
+    },
+    otraEmpresa: {
+        paddingVertical: 8,
+        marginBottom: 8,
+    },
+    opcionMedioPago: {
+        minHeight: 40,
+        justifyContent: 'center',
+        borderBottomWidth: 1,
+        paddingHorizontal: 8,
     },
     btnAgregar: {
         borderWidth: 0.5,
