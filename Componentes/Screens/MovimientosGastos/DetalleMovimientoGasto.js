@@ -20,14 +20,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AntDesign } from '@expo/vector-icons';
 
-const obtenerNombreMedioPago = (medio) => {
+const obtenerNombreMedioPago = (medio, canalesDisponibles = []) => {
   const nombres = [
     medio.TipoMedioPago?.NombreTipo,
     medio.EntidadUsuario?.NombreEntidad,
     medio.MarcaTarjeta?.NombreMarca,
   ].filter(Boolean);
-  const canal = medio.CanalPago?.NombreCanal || medio.CanalPago?.Nombre || (typeof medio.CanalPago === 'string' ? medio.CanalPago : '');
-  return nombres.join(' · ') || canal || 'Otro medio de pago';
+  const canalAnidado = medio.CanalPago || medio.CanalMedioPago || medio.canal_pago || medio.canal;
+  const canalId = medio.id_canal ?? medio.IdCanal ?? medio.canal_id ?? medio.CanalPagoId ?? medio.canal_medio_pago_id ?? canalAnidado?.Id ?? canalAnidado?.id;
+  const canalCatalogo = canalesDisponibles.find(opcion => String(opcion.Id) === String(canalId));
+  const canal = (typeof canalAnidado === 'string' ? canalAnidado : canalAnidado?.NombreCanal || canalAnidado?.Nombre)
+    || medio.NombreCanal
+    || medio.nombre_canal
+    || canalCatalogo?.NombreCanal
+    || '';
+  const nombreMedio = nombres.join(' · ');
+  return [nombreMedio, canal].filter(Boolean).join(' · ') || 'Otro medio de pago';
 };
 
 
@@ -40,6 +48,7 @@ export default function DetalleMovimientoGasto({ navigation }) {
   const { activarsesion, setActivarsesion } = useContext(AuthContext);
   const { reiniciarvalores } = useContext(AuthContext);
   const [datositem, setDatositem] = useState({});
+  const [canalesPagoDisponibles, setCanalesPagoDisponibles] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [imageLoading, setImageLoading] = useState(false);
   const [CompsCabecera,setCompsCabecera]=useState([])
@@ -145,6 +154,16 @@ export default function DetalleMovimientoGasto({ navigation }) {
     });
     return unsubscribe;
   }, [navigation]);
+
+  useEffect(() => {
+    const cargarCanalesPago = async () => {
+      const result = await apiRequest('catalog-medio-pago/lista-canales', 'GET', {});
+      if (result.resp_correcta && Array.isArray(result.data)) {
+        setCanalesPagoDisponibles(result.data);
+      }
+    };
+    cargarCanalesPago();
+  }, [apiRequest]);
 
   useEffect(() => {
         if(confirmaciondelete){
@@ -349,7 +368,7 @@ export default function DetalleMovimientoGasto({ navigation }) {
                   {mediosPago.map((medio, indice) => (
                     <View key={medio.Id ?? medio.id_medio ?? indice} style={[styles.extraMedioPago, indice > 0 && styles.cardRowBorder, indice > 0 && { borderTopColor: colors.screen_componente_estilos.color_borde_cards }]}>
                       <Text style={[styles.cardRowAmount, styles.extraMedioNombre, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto }]}>
-                        {obtenerNombreMedioPago(medio)}
+                        {obtenerNombreMedioPago(medio, canalesPagoDisponibles)}
                       </Text>
                       <Text style={[styles.cardRowAmount, { fontFamily: fonts.balsamiqbold.fontFamily,color: colors.screen_componente_estilos.color_texto_importante }]}>
                         Gs. {Number(medio.MontoMedio ?? medio.monto_medio ?? 0).toLocaleString('es-ES')}

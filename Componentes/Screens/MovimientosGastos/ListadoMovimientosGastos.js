@@ -129,11 +129,6 @@ export default function ListadoMovimientosGastos({ navigation }) {
   actualizarEstadocomponente('recarga_movimientos_gastos', false);
   };
 
-  const cambiarPeriodo = () => {
-    setQuery('');
-    cargardatos();
-  };
-
   const nombresMeses = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
@@ -231,12 +226,6 @@ export default function ListadoMovimientosGastos({ navigation }) {
           <Text style={{ fontFamily: estilos.font_normal, color: estilos.font_color }}>{nombresMeses[Number(mesSeleccionado) - 1]}</Text>
           <Text style={{ color: estilos.font_sub_color }}>▾</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          onPress={cambiarPeriodo}
-          style={[styles.periodoButton, { backgroundColor: estilos.boton_color_fondo, borderColor: estilos.boton_color_borde }]}
-        >
-          <Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_importe_color }}>CARGAR</Text>
-        </TouchableOpacity>
       </View>
 
       {selectorPeriodo && (
@@ -251,7 +240,14 @@ export default function ListadoMovimientosGastos({ navigation }) {
                 <TouchableOpacity
                   key={String(valor)}
                   onPress={() => {
-                    selectorPeriodo === 'anno' ? setAnnoSeleccionado(String(valor)) : setMesSeleccionado(String(valor));
+                    if (selectorPeriodo === 'anno') {
+                      setAnnoSeleccionado(String(valor));
+                    } else {
+                      const mes = String(valor);
+                      setMesSeleccionado(mes);
+                      setQuery('');
+                      cargardatos(annoSeleccionado, mes);
+                    }
                     setSelectorPeriodo(null);
                   }}
                   style={[styles.opcionPeriodo, seleccionado && { backgroundColor: estilos.boton_color_fondo }]}

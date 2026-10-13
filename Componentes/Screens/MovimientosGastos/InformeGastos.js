@@ -1,5 +1,8 @@
-import React, { useCallback, useContext, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { useFocusEffect, useTheme } from '@react-navigation/native';
 import { AuthContext } from '../../../AuthContext';
@@ -9,8 +12,16 @@ import Esperando from '../../Procesando/Espera';
 const formatoGs = (valor) => `Gs. ${Number(valor || 0).toLocaleString('es-ES')}`;
 const formatoFechaISO = (fecha) => `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
 const formatoFechaVisible = (fecha) => `${String(fecha.getDate()).padStart(2, '0')}/${String(fecha.getMonth() + 1).padStart(2, '0')}/${fecha.getFullYear()}`;
+const escaparHtml = (valor) => String(valor ?? '').replace(/[&<>"']/g, caracter => ({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+}[caracter]));
 const TODOS_LOS_MEDIOS = '__todos__';
 const SIN_MEDIO_PAGO = '__sin_medio_pago__';
+const TODOS_LOS_CANALES = '__todos_los_canales__';
 const obtenerNombreMedioPago = (medio) => {
   const nombres = [
     medio.TipoMedioPago?.NombreTipo,
@@ -19,6 +30,17 @@ const obtenerNombreMedioPago = (medio) => {
   ].filter(Boolean);
   const canal = medio.CanalPago?.NombreCanal || medio.CanalPago?.Nombre || (typeof medio.CanalPago === 'string' ? medio.CanalPago : '');
   return nombres.join(' · ') || canal || 'Otro medio de pago';
+};
+const obtenerCanalMedioPago = (medio, canalesDisponibles = []) => {
+  const canalAnidado = medio.CanalPago || medio.CanalMedioPago || medio.canal_pago || medio.canal;
+  const canalId = medio.canal_pago_id ?? medio.id_canal ?? medio.IdCanal ?? medio.canal_id
+    ?? medio.CanalPagoId ?? canalAnidado?.Id ?? canalAnidado?.id;
+  const canalCatalogo = canalesDisponibles.find(opcion => String(opcion.Id) === String(canalId));
+  return (typeof canalAnidado === 'string' ? canalAnidado : canalAnidado?.NombreCanal || canalAnidado?.Nombre)
+    || medio.NombreCanal
+    || medio.nombre_canal
+    || canalCatalogo?.NombreCanal
+    || '';
 };
 const obtenerMontoMedioPago = (medio) => Number(medio.MontoMedio ?? medio.monto_medio) || 0;
 
@@ -37,6 +59,10 @@ export default function InformeGastos() {
   const [movimientos, setMovimientos] = useState([]);
   const [medioPagoSeleccionado, setMedioPagoSeleccionado] = useState(TODOS_LOS_MEDIOS);
   const [selectorMedioPagoVisible, setSelectorMedioPagoVisible] = useState(false);
+  const [canalesPagoDisponibles, setCanalesPagoDisponibles] = useState([]);
+  const [canalPagoSeleccionado, setCanalPagoSeleccionado] = useState(TODOS_LOS_CANALES);
+  const [selectorCanalPagoVisible, setSelectorCanalPagoVisible] = useState(false);
+  const [exportando, setExportando] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const rangoSeleccionadoRef = useRef({ desde: primerDiaMes, hasta: ultimoDiaMes });
@@ -73,10 +99,21 @@ export default function InformeGastos() {
     if (resultado.resp_correcta && Array.isArray(registros)) {
       setMovimientos(registros);
       setMedioPagoSeleccionado(TODOS_LOS_MEDIOS);
+      setCanalPagoSeleccionado(TODOS_LOS_CANALES);
     } else {
       setError(resultado.data?.message || resultado.data?.error || 'No se pudo cargar el informe.');
     }
     setCargando(false);
+  }, [apiRequest]);
+
+  useEffect(() => {
+    const cargarCanalesPago = async () => {
+      const resultado = await apiRequest('catalog-medio-pago/lista-canales', 'GET', {});
+      if (resultado.resp_correcta && Array.isArray(resultado.data)) {
+        setCanalesPagoDisponibles(resultado.data);
+      }
+    };
+    cargarCanalesPago();
   }, [apiRequest]);
 
   useFocusEffect(
@@ -184,21 +221,121 @@ export default function InformeGastos() {
     if (b === SIN_MEDIO_PAGO) return -1;
     return a.localeCompare(b, 'es');
   });
+  const opcionesCanalPago = [...new Set([
+    ...canalesPagoDisponibles.map(canal => canal.NombreCanal),
+    ...movimientos.flatMap(movimiento => {
+      const medios = Array.isArray(movimiento.medios_pagos) ? movimiento.medios_pagos : [];
+      return medios.map(medio => obtenerCanalMedioPago(medio, canalesPagoDisponibles));
+    }),
+  ].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
   const etiquetaMedioPago = (medio) => medio === SIN_MEDIO_PAGO ? 'Sin medio de pago' : medio;
-  const movimientosFiltrados = movimientos.filter(movimiento => {
-    if (medioPagoSeleccionado === TODOS_LOS_MEDIOS) return true;
+  const obtenerMediosFiltrados = (movimiento) => {
     const medios = Array.isArray(movimiento.medios_pagos) ? movimiento.medios_pagos : [];
-    if (medioPagoSeleccionado === SIN_MEDIO_PAGO) return medios.length === 0;
-    return medios.some(medio => obtenerNombreMedioPago(medio) === medioPagoSeleccionado);
+    return medios.filter(medio => (
+      medioPagoSeleccionado === TODOS_LOS_MEDIOS || obtenerNombreMedioPago(medio) === medioPagoSeleccionado
+    ) && (
+      canalPagoSeleccionado === TODOS_LOS_CANALES
+      || obtenerCanalMedioPago(medio, canalesPagoDisponibles) === canalPagoSeleccionado
+    ));
+  };
+  const movimientosFiltrados = movimientos.filter(movimiento => {
+    const medios = Array.isArray(movimiento.medios_pagos) ? movimiento.medios_pagos : [];
+    if (medioPagoSeleccionado === SIN_MEDIO_PAGO) {
+      return medios.length === 0 && canalPagoSeleccionado === TODOS_LOS_CANALES;
+    }
+    if (medioPagoSeleccionado === TODOS_LOS_MEDIOS && canalPagoSeleccionado === TODOS_LOS_CANALES) return true;
+    return obtenerMediosFiltrados(movimiento).length > 0;
   });
   const totalFiltrado = movimientosFiltrados.reduce((total, movimiento) => {
-    if (medioPagoSeleccionado === TODOS_LOS_MEDIOS) return total + (Number(movimiento.total_gasto) || 0);
     const medios = Array.isArray(movimiento.medios_pagos) ? movimiento.medios_pagos : [];
     if (medios.length === 0) return total + (Number(movimiento.total_gasto) || 0);
-    return total + medios
-      .filter(medio => medioPagoSeleccionado === TODOS_LOS_MEDIOS || obtenerNombreMedioPago(medio) === medioPagoSeleccionado)
+    if (medioPagoSeleccionado === TODOS_LOS_MEDIOS && canalPagoSeleccionado === TODOS_LOS_CANALES) {
+      return total + (Number(movimiento.total_gasto) || 0);
+    }
+    return total + obtenerMediosFiltrados(movimiento)
       .reduce((subtotal, medio) => subtotal + obtenerMontoMedioPago(medio), 0);
   }, 0);
+
+  const descargarExtractoPdf = async () => {
+    setExportando(true);
+    setError('');
+    try {
+      const filas = movimientosFiltrados.map(movimiento => {
+        const medios = Array.isArray(movimiento.medios_pagos) ? movimiento.medios_pagos : [];
+        const mediosIncluidos = obtenerMediosFiltrados(movimiento);
+        const monto = medios.length === 0 || (medioPagoSeleccionado === TODOS_LOS_MEDIOS && canalPagoSeleccionado === TODOS_LOS_CANALES)
+          ? Number(movimiento.total_gasto) || 0
+          : mediosIncluidos.reduce((total, medio) => total + obtenerMontoMedioPago(medio), 0);
+        const nombreMedios = medios.length === 0
+          ? 'Sin medio de pago'
+          : mediosIncluidos.map(obtenerNombreMedioPago).join(', ');
+        const canales = mediosIncluidos.map(medio => obtenerCanalMedioPago(medio, canalesPagoDisponibles)).filter(Boolean).join(', ');
+        return `<tr>
+          <td>${escaparHtml(movimiento.fecha_gasto || '')}</td>
+          <td>${escaparHtml(movimiento.empresa?.nombre || 'Empresa sin nombre')}</td>
+          <td>${escaparHtml(movimiento.categoria?.nombre || '')}</td>
+          <td>${escaparHtml(nombreMedios)}</td>
+          <td>${escaparHtml(canales)}</td>
+          <td class="amount">${escaparHtml(formatoGs(monto))}</td>
+        </tr>`;
+      }).join('');
+      const etiquetaMedio = medioPagoSeleccionado === TODOS_LOS_MEDIOS ? 'Todos los medios' : etiquetaMedioPago(medioPagoSeleccionado);
+      const etiquetaCanal = canalPagoSeleccionado === TODOS_LOS_CANALES ? 'Todos los canales' : canalPagoSeleccionado;
+      const html = `<!DOCTYPE html>
+        <html><head><meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <style>
+            @page { size: A4 landscape; margin: 16mm; }
+            body { color: #17212b; font-family: Arial, sans-serif; font-size: 10px; }
+            h1 { color: #087f5b; font-size: 22px; margin: 0 0 5px; }
+            .period { color: #52606d; margin-bottom: 16px; }
+            .summary { background: #f0f7f4; border-left: 4px solid #087f5b; margin-bottom: 16px; padding: 10px 12px; }
+            .summary strong { font-size: 14px; }
+            table { border-collapse: collapse; width: 100%; }
+            th { background: #e9f2ee; color: #263b34; text-align: left; }
+            th, td { border-bottom: 1px solid #d9e2de; padding: 8px 7px; vertical-align: top; }
+            .amount { text-align: right; white-space: nowrap; }
+            footer { color: #64716c; font-size: 9px; margin-top: 14px; }
+          </style>
+        </head><body>
+          <h1>Extracto de gastos</h1>
+          <div class="period">Período: ${escaparHtml(formatoFechaVisible(desdeSeleccionado))} al ${escaparHtml(formatoFechaVisible(hastaSeleccionado))}</div>
+          <div class="summary">
+            <div>Medio: ${escaparHtml(etiquetaMedio)}</div>
+            <div>Canal: ${escaparHtml(etiquetaCanal)}</div>
+            <p><strong>Gasto total: ${escaparHtml(formatoGs(totalFiltrado))}</strong> &nbsp; · &nbsp; Registros: ${movimientosFiltrados.length}</p>
+          </div>
+          <table>
+            <thead><tr><th>Fecha</th><th>Empresa</th><th>Categoría</th><th>Medio de pago</th><th>Canal</th><th class="amount">Importe</th></tr></thead>
+            <tbody>${filas || '<tr><td colspan="6">Sin gastos para este período y filtros.</td></tr>'}</tbody>
+          </table>
+          <footer>Generado el ${escaparHtml(formatoFechaVisible(new Date()))}</footer>
+        </body></html>`;
+
+      if (Platform.OS === 'web') {
+        const ventanaImpresion = window.open('', '_blank');
+        if (!ventanaImpresion) throw new Error('No se pudo abrir el documento del extracto.');
+        ventanaImpresion.document.open();
+        ventanaImpresion.document.write(html.replace(
+          '</body>',
+          '<script>window.addEventListener("load", function () { window.print(); });</script></body>',
+        ));
+        ventanaImpresion.document.close();
+        ventanaImpresion.focus();
+      } else {
+        const archivo = await Print.printToFileAsync({ html });
+        await Sharing.shareAsync(archivo.uri, {
+          mimeType: 'application/pdf',
+          UTI: 'com.adobe.pdf',
+          dialogTitle: 'Extracto de gastos',
+        });
+      }
+    } catch {
+      setError('No se pudo generar el extracto PDF. Inténtelo nuevamente.');
+    } finally {
+      setExportando(false);
+    }
+  };
 
   if (cargando && movimientos.length === 0) return <Esperando titulo="Cargando informe" />;
 
@@ -217,6 +354,19 @@ export default function InformeGastos() {
             <Text style={{ color: estilos.texto, fontFamily: estilos.fuenteNegrita }}>Ver</Text>
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Descargar extracto de gastos en PDF"
+          disabled={exportando}
+          onPress={descargarExtractoPdf}
+          style={[styles.botonPdf, { backgroundColor: estilos.boton, borderColor: estilos.borde, opacity: exportando ? 0.65 : 1 }]}
+        >
+          <MaterialCommunityIcons name="file-pdf-box" size={20} color={estilos.importante} />
+          <Text style={{ color: estilos.importante, fontFamily: estilos.fuenteNegrita }}>
+            {exportando ? 'Generando PDF...' : 'Descargar extracto PDF'}
+          </Text>
+        </TouchableOpacity>
 
       {error ? (
         <View style={[styles.mensajeError, { backgroundColor: estilos.card, borderColor: estilos.borde }]}>
@@ -258,6 +408,40 @@ export default function InformeGastos() {
         )}
       </View>
 
+      <View style={styles.filtroSeccion}>
+        <Text style={[styles.etiquetaTotal, { color: estilos.subtitulo, fontFamily: estilos.fuente }]}>Canal de pago</Text>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Filtrar gastos por canal de pago"
+          onPress={() => setSelectorCanalPagoVisible(!selectorCanalPagoVisible)}
+          style={[styles.selectorMedioPago, { backgroundColor: estilos.card, borderColor: estilos.borde }]}
+        >
+          <Text numberOfLines={1} style={[styles.selectorValor, { color: estilos.texto, fontFamily: estilos.fuenteNegrita }]}>
+            {canalPagoSeleccionado === TODOS_LOS_CANALES ? 'Todos los canales' : canalPagoSeleccionado}
+          </Text>
+          <Text style={{ color: estilos.subtitulo }}>▾</Text>
+        </TouchableOpacity>
+        {selectorCanalPagoVisible && (
+          <View style={[styles.opcionesMedioPago, { backgroundColor: estilos.card, borderColor: estilos.borde }]}>
+            {[TODOS_LOS_CANALES, ...opcionesCanalPago].map(canal => (
+              <TouchableOpacity
+                key={canal}
+                accessibilityRole="button"
+                onPress={() => {
+                  setCanalPagoSeleccionado(canal);
+                  setSelectorCanalPagoVisible(false);
+                }}
+                style={[styles.opcionMedioPago, { borderBottomColor: estilos.borde }]}
+              >
+                <Text style={{ color: estilos.texto, fontFamily: canal === canalPagoSeleccionado ? estilos.fuenteNegrita : estilos.fuente }}>
+                  {canal === TODOS_LOS_CANALES ? 'Todos los canales' : canal}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
+
       <View style={[styles.resumen, { backgroundColor: estilos.card, borderColor: estilos.borde }]}>
         <View style={styles.resumenTexto}>
           <Text style={[styles.etiquetaTotal, { color: estilos.subtitulo, fontFamily: estilos.fuente }]}>Gasto total</Text>
@@ -273,11 +457,10 @@ export default function InformeGastos() {
         <Text style={[styles.tituloSeccion, { color: estilos.texto, fontFamily: estilos.fuenteNegrita }]}>Movimientos</Text>
         {movimientosFiltrados.length ? movimientosFiltrados.map((movimiento, indice) => {
           const medios = Array.isArray(movimiento.medios_pagos) ? movimiento.medios_pagos : [];
-          const monto = medioPagoSeleccionado === TODOS_LOS_MEDIOS || medios.length === 0
+          const mediosIncluidos = obtenerMediosFiltrados(movimiento);
+          const monto = medios.length === 0 || (medioPagoSeleccionado === TODOS_LOS_MEDIOS && canalPagoSeleccionado === TODOS_LOS_CANALES)
             ? Number(movimiento.total_gasto) || 0
-            : medios
-              .filter(medio => obtenerNombreMedioPago(medio) === medioPagoSeleccionado)
-              .reduce((total, medio) => total + obtenerMontoMedioPago(medio), 0);
+            : mediosIncluidos.reduce((total, medio) => total + obtenerMontoMedioPago(medio), 0);
           const nombreMedios = medios.length ? medios.map(obtenerNombreMedioPago).join(', ') : 'Sin medio de pago';
           return (
             <View key={`${movimiento.id ?? movimiento.numero_factura ?? 'movimiento'}-${indice}`} style={[styles.movimiento, { borderBottomColor: estilos.borde }]}>
@@ -336,6 +519,7 @@ const styles = StyleSheet.create({
   contenido: { paddingHorizontal: 14, paddingTop: 16, paddingBottom: 24 },
   titulo: { fontSize: 23, marginBottom: 14 },
   periodoBox: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 12 },
+  botonPdf: { minHeight: 42, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 14 },
   selector: { flex: 1, minWidth: 0, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
   selectorLabel: { fontSize: 11 },
   selectorValor: { fontSize: 12, marginTop: 2 },
