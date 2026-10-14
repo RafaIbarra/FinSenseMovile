@@ -488,7 +488,8 @@ export default function RegistroMovimientoGasto({ navigation }){
             titulo:'REGISTRO GASTOS',
             mensaje: mensajeExito,
             is_error: false,
-            valor_estado:nuevo
+            valor_estado:nuevo,
+            omitirnavagacion: false,
             }));
             setEstadonotificacion(true)
         } else {
@@ -534,6 +535,7 @@ export default function RegistroMovimientoGasto({ navigation }){
                 mensaje: 'El desajuste fue reportado correctamente',
                 is_error: false,
                 valor_estado: '',
+                omitirnavagacion: true,
             }));
             setEstadonotificacion(true);
             setObservacion('');

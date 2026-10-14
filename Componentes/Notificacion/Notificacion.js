@@ -106,7 +106,7 @@ export default function Notificacion({ navigation,bodynotificacion,onOk }) {
                 // navigate(bodynotificacion?.navnivel1, {screen: bodynotificacion?.navnivel2,params: {screen: bodynotificacion?.navnivel3,}})
                 //  navigate(bodynotificacion?.navnivel2, {screen: bodynotificacion?.navnivel3})
                 // navigation.goBack();
-                if (!('omitirnavagacion' in bodynotificacion)){
+                if (!bodynotificacion?.omitirnavagacion){
 
                     navigation.popToTop()
                 }
