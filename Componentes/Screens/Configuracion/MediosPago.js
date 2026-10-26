@@ -23,6 +23,7 @@ export default function MediosPago() {
     const [entidadSeleccionada, setEntidadSeleccionada] = useState(null);
     const [marcaSeleccionada, setMarcaSeleccionada] = useState(null);
     const [selectorAbierto, setSelectorAbierto] = useState('');
+    const [pestanaActiva, setPestanaActiva] = useState('medio');
     const [guardando, setGuardando] = useState(false);
     const [mensaje, setMensaje] = useState(null);
 
@@ -190,31 +191,62 @@ export default function MediosPago() {
     return (
         <ScrollView style={{ flex: 1, backgroundColor: estilos.fondo }} contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
             <Text style={[styles.titulo, { color: estilos.texto, fontFamily: estilos.negrita }]}>Medios de pago</Text>
-            {mensaje && <Text style={[styles.mensaje, { color: mensaje.error ? '#b42318' : '#18864b', fontFamily: estilos.regular }]}>{mensaje.texto}</Text>}
-
-            <View style={[styles.seccion, { backgroundColor: estilos.tarjeta, borderColor: estilos.borde }]}>
-                <Text style={[styles.tituloSeccion, { color: estilos.texto, fontFamily: estilos.negrita }]}>Nuevo medio de pago</Text>
-                {renderSelector('tipo', 'Tipo', tipoSeleccionado, datos.tipos, 'tipos', setTipoSeleccionado)}
-                {renderSelector('entidad', 'Entidad financiera', entidadSeleccionada, datos.entidades, 'entidades', setEntidadSeleccionada, true)}
-                {renderSelector('marca', 'Marca de tarjeta', marcaSeleccionada, datos.marcas, 'marcas', setMarcaSeleccionada, true)}
-                <TouchableOpacity disabled={guardando} onPress={registrarMedio} style={[styles.botonCompleto, { backgroundColor: estilos.boton }]}>
-                    <Text style={{ color: estilos.texto, fontFamily: estilos.negrita }}>{guardando ? 'GUARDANDO...' : 'REGISTRAR MEDIO'}</Text>
-                </TouchableOpacity>
-                {datos.medios.map(item => {
-                    const descripcion = [item.TipoMedioPago?.NombreTipo, item.EntidadUsuario?.NombreEntidad, item.MarcaTarjeta?.NombreMarca].filter(Boolean).join(' · ');
+            <View style={[styles.pestanas, { borderColor: estilos.borde, backgroundColor: estilos.tarjeta }]}>
+                {[
+                    { key: 'medio', label: 'Registrar medio' },
+                    { key: 'entidades', label: 'Entidades' },
+                    { key: 'marcas', label: 'Marcas de tarjetas' },
+                ].map(pestana => {
+                    const seleccionada = pestanaActiva === pestana.key;
                     return (
-                        <View key={item.Id} style={[styles.filaLista, { borderTopColor: estilos.borde }]}>
-                            <Text style={{ flex: 1, color: estilos.texto, fontFamily: estilos.regular }}>{descripcion}</Text>
-                            <TouchableOpacity onPress={() => cambiarEstado('medios', item)}>
-                                <Text style={{ color: item.IsActive ? estilos.acento : estilos.secundario, fontFamily: estilos.negrita }}>{item.IsActive ? 'DESACTIVAR' : 'ACTIVAR'}</Text>
-                            </TouchableOpacity>
-                        </View>
+                        <TouchableOpacity
+                            key={pestana.key}
+                            accessibilityRole="tab"
+                            accessibilityState={{ selected: seleccionada }}
+                            onPress={() => setPestanaActiva(pestana.key)}
+                            style={[
+                                styles.pestana,
+                                { borderBottomColor: seleccionada ? estilos.acento : 'transparent' },
+                            ]}
+                        >
+                            <Text
+                                style={{
+                                    color: seleccionada ? estilos.acento : estilos.secundario,
+                                    fontFamily: seleccionada ? estilos.negrita : estilos.regular,
+                                }}
+                            >
+                                {pestana.label}
+                            </Text>
+                        </TouchableOpacity>
                     );
                 })}
             </View>
+            {mensaje && <Text style={[styles.mensaje, { color: mensaje.error ? '#b42318' : '#18864b', fontFamily: estilos.regular }]}>{mensaje.texto}</Text>}
 
-            {renderCatalogo('entidades', datos.entidades, entidad, setEntidad)}
-            {renderCatalogo('marcas', datos.marcas, marca, setMarca)}
+            {pestanaActiva === 'medio' && (
+                <View style={[styles.seccion, { backgroundColor: estilos.tarjeta, borderColor: estilos.borde }]}>
+                    <Text style={[styles.tituloSeccion, { color: estilos.texto, fontFamily: estilos.negrita }]}>Nuevo medio de pago</Text>
+                    {renderSelector('tipo', 'Tipo', tipoSeleccionado, datos.tipos, 'tipos', setTipoSeleccionado)}
+                    {renderSelector('entidad', 'Entidad financiera', entidadSeleccionada, datos.entidades, 'entidades', setEntidadSeleccionada, true)}
+                    {renderSelector('marca', 'Marca de tarjeta', marcaSeleccionada, datos.marcas, 'marcas', setMarcaSeleccionada, true)}
+                    <TouchableOpacity disabled={guardando} onPress={registrarMedio} style={[styles.botonCompleto, { backgroundColor: estilos.boton }]}>
+                        <Text style={{ color: estilos.texto, fontFamily: estilos.negrita }}>{guardando ? 'GUARDANDO...' : 'REGISTRAR MEDIO'}</Text>
+                    </TouchableOpacity>
+                    {datos.medios.map(item => {
+                        const descripcion = [item.TipoMedioPago?.NombreTipo, item.EntidadUsuario?.NombreEntidad, item.MarcaTarjeta?.NombreMarca].filter(Boolean).join(' · ');
+                        return (
+                            <View key={item.Id} style={[styles.filaLista, { borderTopColor: estilos.borde }]}>
+                                <Text style={{ flex: 1, color: estilos.texto, fontFamily: estilos.regular }}>{descripcion}</Text>
+                                <TouchableOpacity onPress={() => cambiarEstado('medios', item)}>
+                                    <Text style={{ color: item.IsActive ? estilos.acento : estilos.secundario, fontFamily: estilos.negrita }}>{item.IsActive ? 'DESACTIVAR' : 'ACTIVAR'}</Text>
+                                </TouchableOpacity>
+                            </View>
+                        );
+                    })}
+                </View>
+            )}
+            {pestanaActiva === 'entidades' && renderCatalogo('entidades', datos.entidades, entidad, setEntidad)}
+            {pestanaActiva === 'marcas' && renderCatalogo('marcas', datos.marcas, marca, setMarca)}
         </ScrollView>
     );
 }
@@ -222,6 +254,8 @@ export default function MediosPago() {
 const styles = StyleSheet.create({
     contenido: { padding: 16, paddingBottom: 36, gap: 14 },
     titulo: { fontSize: 22, marginBottom: 2 },
+    pestanas: { flexDirection: 'row', borderWidth: 1, borderRadius: 8, overflow: 'hidden' },
+    pestana: { flex: 1, minHeight: 48, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderBottomWidth: 2 },
     tituloSeccion: { fontSize: 16, marginBottom: 12 },
     seccion: { borderWidth: 1, borderRadius: 8, padding: 14 },
     filaAlta: { flexDirection: 'row', alignItems: 'center', gap: 8 },

@@ -1,6 +1,6 @@
 import React, { useState, useContext,useEffect } from 'react';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity,
-    TextInput,KeyboardAvoidingView,Platform, Image, ActivityIndicator, Modal, Alert
+    TextInput,KeyboardAvoidingView,Platform, Image, ActivityIndicator, Modal
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -19,6 +19,30 @@ const formatearFecha = (fecha) => `${fecha.getFullYear()}-${String(fecha.getMont
 const obtenerFechaLocal = (fecha) => {
     const [anno, mes, dia] = String(fecha || formatearFecha(new Date())).split('-').map(Number);
     return new Date(anno, mes - 1, dia);
+};
+const formatearMonto = (valor) => {
+    if (valor === '' || valor === null || valor === undefined) return '';
+    const monto = Number(valor);
+    return Number.isFinite(monto)
+        ? monto.toLocaleString('es-PY', { maximumFractionDigits: 2 })
+        : '';
+};
+const normalizarMonto = (valor) => {
+    const entrada = String(valor).replace(/[^\d.,]/g, '');
+    const ultimaComa = entrada.lastIndexOf(',');
+    const puntos = entrada.match(/\./g) || [];
+    const ultimoPunto = entrada.lastIndexOf('.');
+    const puntoEsDecimal = puntos.length === 1
+        && ultimoPunto < entrada.length - 1
+        && entrada.length - ultimoPunto - 1 <= 2;
+    const separadorDecimal = ultimaComa >= 0 ? ',' : puntoEsDecimal ? '.' : '';
+
+    if (!separadorDecimal) return entrada.replace(/\D/g, '');
+
+    const indiceDecimal = separadorDecimal === ',' ? ultimaComa : ultimoPunto;
+    const entero = entrada.slice(0, indiceDecimal).replace(/\D/g, '');
+    const decimal = entrada.slice(indiceDecimal + 1).replace(/\D/g, '');
+    return decimal ? `${entero || '0'}.${decimal}` : `${entero}.`;
 };
 
 export default function RegistroMovimientoGasto({ navigation }){
@@ -60,6 +84,9 @@ export default function RegistroMovimientoGasto({ navigation }){
 
     // ── Campos del formulario ──
     const [comprobante, setComprobante] = useState(null);
+    const [imagenComprobanteVisible, setImagenComprobanteVisible] = useState(false);
+    const [zoomImagenComprobante, setZoomImagenComprobante] = useState(1);
+    const [montoEnEdicion, setMontoEnEdicion] = useState('');
     const [payload, setPayload] = useState(null);
     const [observacion, setObservacion] = useState('');
     const [formularioReporteVisible, setFormularioReporteVisible] = useState(false);
@@ -306,18 +333,6 @@ export default function RegistroMovimientoGasto({ navigation }){
         }
     };
 
-    const abrirOpcionesComprobante = () => {
-        if (Platform.OS === 'web') {
-            elegirComprobanteGaleria();
-            return;
-        }
-        Alert.alert('Agregar comprobante', 'Elija cómo desea agregarlo', [
-            { text: 'Tomar foto', onPress: tomarFotoComprobante },
-            { text: 'Elegir de galería', onPress: elegirComprobanteGaleria },
-            { text: 'Cancelar', style: 'cancel' },
-        ]);
-    };
-
     const extraerClasificar = async () => {
         if (!comprobante?.uri) {
             mostrarError('Seleccione una imagen del comprobante');
@@ -353,7 +368,7 @@ export default function RegistroMovimientoGasto({ navigation }){
                 }]);
                 setEmpresasAbiertas(false);
                 setBusquedaEmpresa('');
-                setTitulo('Editar movimiento gasto');
+                setTitulo('Registrar movimiento gasto');
                 return;
             }
 
@@ -573,7 +588,7 @@ export default function RegistroMovimientoGasto({ navigation }){
                 onEdit={() => {}}
                 showbottons={false}
                 
-              />
+            />
 
             <ScrollView
                 style={{ flex: 1, backgroundColor: estilos.pantalla_color_fondo }}
@@ -581,7 +596,7 @@ export default function RegistroMovimientoGasto({ navigation }){
         keyboardShouldPersistTaps="handled"
             >
 
-                <Text style={[styles.tituloSeccion, { fontFamily: estilos.font_negrita, color: estilos.font_color }]}>Registrar gasto</Text>
+                {/* <Text style={[styles.tituloSeccion, { fontFamily: estilos.font_negrita, color: estilos.font_color }]}>Registrar gasto</Text> */}
 
                 <View style={[styles.selectorModo, { borderColor: estilos.cards_color_border }]}> 
                     <TouchableOpacity
@@ -598,19 +613,70 @@ export default function RegistroMovimientoGasto({ navigation }){
                     </TouchableOpacity>
                 </View>
 
-                {modoRegistro === 'asistido' && <View>
-                    <TouchableOpacity
-                        style={[styles.btn, { backgroundColor: estilos.boton_color_fondo, borderColor: estilos.boton_color_borde }]}
-                        onPress={abrirOpcionesComprobante}
-                    >
-                        <MaterialCommunityIcons name="image-plus-outline" size={20} color={estilos.font_importe_color} />
-                        <Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_importe_color, textAlign: 'center' }}>
-                            {comprobante ? 'CAMBIAR COMPROBANTE' : 'SELECCIONAR COMPROBANTE'}
-                        </Text>
-                    </TouchableOpacity>
+                {modoRegistro === 'asistido' && <View style={[styles.comprobanteSelector, {
+                    backgroundColor: estilos.cards_color_fondo,
+                    borderColor: estilos.cards_color_border,
+                }]}>
+                    <View style={styles.comprobanteEncabezado}>
+                        <View style={[styles.comprobanteIcono, { backgroundColor: estilos.boton_color_fondo }]}>
+                            <MaterialCommunityIcons name="receipt-text-outline" size={22} color={estilos.font_importe_color} />
+                        </View>
+                        <View style={styles.comprobanteTextos}>
+                            <Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_color, fontSize: 15 }}>
+                                {comprobante ? 'Comprobante seleccionado' : 'Agregar comprobante'}
+                            </Text>
+                            <Text style={{ fontFamily: estilos.font_normal, color: estilos.font_sub_color, fontSize: 12, marginTop: 3 }}>
+                                {comprobante ? 'Puedes elegir otra imagen cuando quieras.' : 'Elige una imagen o toma una foto.'}
+                            </Text>
+                        </View>
+                    </View>
+                    <View style={styles.comprobanteAcciones}>
+                        <TouchableOpacity
+                            accessibilityRole="button"
+                            accessibilityLabel="Elegir comprobante de la galería"
+                            style={[styles.comprobanteOpcion, { backgroundColor: estilos.pantalla_color_fondo, borderColor: estilos.cards_color_border }]}
+                            onPress={elegirComprobanteGaleria}
+                        >
+                            <MaterialCommunityIcons name="image-multiple-outline" size={23} color={estilos.font_importe_color} />
+                            <Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_color, textAlign: 'center', fontSize: 12, marginTop: 7 }}>
+                                Elegir de galería
+                            </Text>
+                        </TouchableOpacity>
+                        {Platform.OS !== 'web' && (
+                            <TouchableOpacity
+                                accessibilityRole="button"
+                                accessibilityLabel="Tomar foto del comprobante"
+                                style={[styles.comprobanteOpcion, { backgroundColor: estilos.pantalla_color_fondo, borderColor: estilos.cards_color_border }]}
+                                onPress={tomarFotoComprobante}
+                            >
+                                <MaterialCommunityIcons name="camera-outline" size={23} color={estilos.font_importe_color} />
+                                <Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_color, textAlign: 'center', fontSize: 12, marginTop: 7 }}>
+                                    Tomar foto
+                                </Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
                 </View>}
 
-                {modoRegistro === 'asistido' && comprobante?.uri && <Image source={{ uri: comprobante.uri }} style={styles.preview} resizeMode="contain" />}
+                {modoRegistro === 'asistido' && comprobante?.uri && <>
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="Visualizar comprobante y ampliar imagen"
+                        onPress={() => {
+                            setZoomImagenComprobante(1);
+                            setImagenComprobanteVisible(true);
+                        }}
+                        style={styles.preview}
+                    >
+                        <Image source={{ uri: comprobante.uri }} style={styles.previewImage} resizeMode="contain" />
+                        <View style={styles.previewHint}>
+                            <MaterialCommunityIcons name="magnify-plus-outline" size={16} color="#fff" />
+                            <Text style={{ color: '#fff', fontFamily: estilos.font_negrita, fontSize: 11, marginLeft: 4 }}>
+                                Toca para ampliar
+                            </Text>
+                        </View>
+                    </TouchableOpacity>
+                </>}
 
                 {modoRegistro === 'asistido' && <TouchableOpacity
                     style={[styles.btn, { backgroundColor: estilos.boton_color_fondo, borderColor: estilos.boton_color_borde, opacity: extrayendo ? 0.65 : 1 }]}
@@ -735,8 +801,10 @@ export default function RegistroMovimientoGasto({ navigation }){
                     Total Gasto
                 </Text>
                 <TextInput
-                    value={String(payload.factura.total ?? '')}
-                    onChangeText={(value) => actualizarFactura('total', value)}
+                    value={montoEnEdicion === 'total' ? String(payload.factura.total ?? '') : formatearMonto(payload.factura.total)}
+                    onFocus={() => setMontoEnEdicion('total')}
+                    onBlur={() => setMontoEnEdicion('')}
+                    onChangeText={(value) => actualizarFactura('total', normalizarMonto(value))}
                     keyboardType="numeric"
                     placeholder="Monto"
                     placeholderTextColor={estilos.font_sub_color}
@@ -753,8 +821,10 @@ export default function RegistroMovimientoGasto({ navigation }){
                             IVA 10%
                         </Text>
                         <TextInput
-                            value={String(payload.factura.iva_diez ?? 0)}
-                            onChangeText={(value) => actualizarFactura('iva_diez', value)}
+                            value={montoEnEdicion === 'iva_diez' ? String(payload.factura.iva_diez ?? 0) : formatearMonto(payload.factura.iva_diez ?? 0)}
+                            onFocus={() => setMontoEnEdicion('iva_diez')}
+                            onBlur={() => setMontoEnEdicion('')}
+                            onChangeText={(value) => actualizarFactura('iva_diez', normalizarMonto(value))}
                             keyboardType="numeric"
                             placeholder="0"
                             placeholderTextColor={estilos.font_sub_color}
@@ -770,8 +840,10 @@ export default function RegistroMovimientoGasto({ navigation }){
                             IVA 5%
                         </Text>
                         <TextInput
-                            value={String(payload.factura.iva_cinco ?? 0)}
-                            onChangeText={(value) => actualizarFactura('iva_cinco', value)}
+                            value={montoEnEdicion === 'iva_cinco' ? String(payload.factura.iva_cinco ?? 0) : formatearMonto(payload.factura.iva_cinco ?? 0)}
+                            onFocus={() => setMontoEnEdicion('iva_cinco')}
+                            onBlur={() => setMontoEnEdicion('')}
+                            onChangeText={(value) => actualizarFactura('iva_cinco', normalizarMonto(value))}
                             keyboardType="numeric"
                             placeholder="0"
                             placeholderTextColor={estilos.font_sub_color}
@@ -984,8 +1056,10 @@ export default function RegistroMovimientoGasto({ navigation }){
                                 </View>
                             )}
                             <TextInput
-                                value={String(medio.monto_medio)}
-                                onChangeText={valor => actualizarMedioPago(indice, 'monto_medio', valor)}
+                                value={montoEnEdicion === `medio_${indice}` ? String(medio.monto_medio) : formatearMonto(medio.monto_medio)}
+                                onFocus={() => setMontoEnEdicion(`medio_${indice}`)}
+                                onBlur={() => setMontoEnEdicion('')}
+                                onChangeText={valor => actualizarMedioPago(indice, 'monto_medio', normalizarMonto(valor))}
                                 keyboardType="numeric"
                                 placeholder="Monto aplicado"
                                 placeholderTextColor={estilos.font_sub_color}
@@ -1001,7 +1075,7 @@ export default function RegistroMovimientoGasto({ navigation }){
                 )}
 
                 <TouchableOpacity
-                    style={[styles.btn,
+                    style={[styles.btn, styles.botonRegistrar,
                         { backgroundColor: estilos.boton_color_fondo, borderColor: estilos.boton_color_borde }
                     ]}
                     onPress={registrar_gasto}
@@ -1069,6 +1143,65 @@ export default function RegistroMovimientoGasto({ navigation }){
                 </>}
 
             </ScrollView>
+            <Modal
+                visible={imagenComprobanteVisible && Boolean(comprobante?.uri)}
+                transparent
+                animationType="fade"
+                statusBarTranslucent
+                onRequestClose={() => setImagenComprobanteVisible(false)}
+            >
+                <View style={styles.viewerOverlay}>
+                    <View style={styles.viewerHeader}>
+                        <TouchableOpacity
+                            accessibilityRole="button"
+                            accessibilityLabel="Cerrar visualización del comprobante"
+                            onPress={() => setImagenComprobanteVisible(false)}
+                            style={styles.viewerClose}
+                        >
+                            <MaterialCommunityIcons name="close" size={26} color="#fff" />
+                        </TouchableOpacity>
+                    </View>
+                    <View style={styles.viewerImageArea}>
+                        {comprobante?.uri && (
+                            <Image
+                                source={{ uri: comprobante.uri }}
+                                resizeMode="contain"
+                                style={[styles.viewerImage, { transform: [{ scale: zoomImagenComprobante }] }]}
+                            />
+                        )}
+                    </View>
+                    <View style={styles.viewerControls}>
+                        <TouchableOpacity
+                            accessibilityRole="button"
+                            accessibilityLabel="Reducir zoom"
+                            disabled={zoomImagenComprobante <= 1}
+                            onPress={() => setZoomImagenComprobante(zoom => Math.max(1, Number((zoom - 0.5).toFixed(1))))}
+                            style={[styles.viewerZoomButton, zoomImagenComprobante <= 1 && styles.viewerZoomButtonDisabled]}
+                        >
+                            <MaterialCommunityIcons name="magnify-minus-outline" size={24} color="#fff" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            accessibilityRole="button"
+                            accessibilityLabel="Restablecer zoom"
+                            onPress={() => setZoomImagenComprobante(1)}
+                            style={styles.viewerZoomValue}
+                        >
+                            <Text style={{ color: '#fff', fontFamily: estilos.font_negrita }}>
+                                {Math.round(zoomImagenComprobante * 100)}%
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            accessibilityRole="button"
+                            accessibilityLabel="Aumentar zoom"
+                            disabled={zoomImagenComprobante >= 4}
+                            onPress={() => setZoomImagenComprobante(zoom => Math.min(4, Number((zoom + 0.5).toFixed(1))))}
+                            style={[styles.viewerZoomButton, zoomImagenComprobante >= 4 && styles.viewerZoomButtonDisabled]}
+                        >
+                            <MaterialCommunityIcons name="magnify-plus-outline" size={24} color="#fff" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
             {Platform.OS === 'ios' && (
                 <Modal
                     transparent
@@ -1150,11 +1283,116 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 8,
     },
+    comprobanteSelector: {
+        borderWidth: 1,
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 12,
+    },
+    comprobanteEncabezado: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginBottom: 14,
+    },
+    comprobanteIcono: {
+        width: 42,
+        height: 42,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 12,
+    },
+    comprobanteTextos: {
+        flex: 1,
+    },
+    comprobanteAcciones: {
+        flexDirection: 'row',
+        gap: 10,
+    },
+    comprobanteOpcion: {
+        flex: 1,
+        minHeight: 84,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 12,
+        borderWidth: 1,
+        borderRadius: 10,
+    },
     preview: {
         width: '100%',
         height: 190,
         marginBottom: 12,
         borderRadius: 10,
+        overflow: 'hidden',
+        backgroundColor: '#000',
+    },
+    previewImage: {
+        width: '100%',
+        height: '100%',
+    },
+    previewHint: {
+        position: 'absolute',
+        right: 8,
+        bottom: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: 16,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        backgroundColor: 'rgba(0,0,0,0.65)',
+    },
+    viewerOverlay: {
+        flex: 1,
+        backgroundColor: '#080808',
+        paddingHorizontal: 16,
+        paddingTop: Platform.OS === 'ios' ? 44 : 20,
+        paddingBottom: 20,
+    },
+    viewerHeader: {
+        minHeight: 48,
+        alignItems: 'flex-end',
+        justifyContent: 'center',
+    },
+    viewerClose: {
+        width: 44,
+        height: 44,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    viewerImageArea: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    viewerImage: {
+        width: '100%',
+        height: '100%',
+    },
+    viewerControls: {
+        minHeight: 64,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 16,
+    },
+    viewerZoomButton: {
+        width: 48,
+        height: 48,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 24,
+        backgroundColor: '#292929',
+    },
+    viewerZoomButtonDisabled: {
+        opacity: 0.4,
+    },
+    viewerZoomValue: {
+        minWidth: 64,
+        minHeight: 44,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     label: {
         fontSize: 12,
@@ -1329,5 +1567,8 @@ const styles = StyleSheet.create({
         padding: 14,
         alignItems: 'center',
         marginTop: 8,
+    },
+    botonRegistrar: {
+        marginBottom: 16,
     },
 });

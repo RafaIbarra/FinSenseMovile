@@ -58,8 +58,10 @@ const styles = StyleSheet.create({
     },
     texto: {
         marginBottom: 20, // Espacio entre el texto y el LottieView
-        fontSize:30,
-        
+        fontSize: 30,
+        textAlign: 'center',
+        alignSelf: 'stretch',
+        paddingHorizontal: 20,
     },
 });
 
