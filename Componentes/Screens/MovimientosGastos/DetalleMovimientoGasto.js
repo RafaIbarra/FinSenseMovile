@@ -174,6 +174,32 @@ export default function DetalleMovimientoGasto({ navigation }) {
   const tieneComprobante = Array.isArray(datositem.imagenes) && datositem.imagenes.length > 0;
   const mediosPago = Array.isArray(datositem.medios_pagos) ? datositem.medios_pagos : [];
   const rucEmpresa = datositem.empresa?.ruc || datositem.ruc_empresa;
+  const gruposEtiquetas = (Array.isArray(datositem.etiquetas) ? datositem.etiquetas : [])
+    .map(etiqueta => ({ etiqueta, conceptos: [] }));
+
+  (Array.isArray(datositem.conceptos) ? datositem.conceptos : []).forEach(concepto => {
+    const etiquetaConcepto = concepto.etiqueta;
+    let grupo = gruposEtiquetas.find(({ etiqueta }) => {
+      const idEtiqueta = etiqueta.idetiqueta ?? etiqueta.id;
+      const idEtiquetaConcepto = etiquetaConcepto?.id ?? etiquetaConcepto?.idetiqueta;
+      return (idEtiqueta != null && idEtiquetaConcepto != null && String(idEtiqueta) === String(idEtiquetaConcepto))
+        || (etiqueta.nombre && etiquetaConcepto?.nombre
+          && String(etiqueta.nombre).toLowerCase() === String(etiquetaConcepto.nombre).toLowerCase());
+    });
+
+    if (!grupo) {
+      const etiqueta = etiquetaConcepto?.nombre ? etiquetaConcepto : { nombre: 'Sin etiqueta' };
+      grupo = gruposEtiquetas.find(({ etiqueta: existente }) => (
+        String(existente.nombre || '').toLowerCase() === String(etiqueta.nombre).toLowerCase()
+      ));
+      if (!grupo) {
+        grupo = { etiqueta, conceptos: [] };
+        gruposEtiquetas.push(grupo);
+      }
+    }
+
+    grupo.conceptos.push(concepto);
+  });
 
   if (!ready) return <Esperando titulo={tituloespera}/>;
 
@@ -272,55 +298,29 @@ export default function DetalleMovimientoGasto({ navigation }) {
         <View style={[styles.cardsContainer]}>
 
           
-          {datositem.etiquetas?.length > 0 && (
+          {gruposEtiquetas.length > 0 && (
             <View style={[styles.card,{backgroundColor:colors.screen_componente_estilos.color_fondo_cards}]}>
               <Text style={[styles.cardTitle, { fontFamily: fonts.balsamiqbold.fontFamily,color: colors.screen_componente_estilos.color_texto_subtitulo }]}>
-                ETIQUETAS
+                ETIQUETAS Y CONCEPTOS
               </Text>
-              <View style={styles.chipsWrap}>
-                {datositem.etiquetas.map((etiqueta) => (
-                  <View
-                    key={etiqueta.idetiqueta}
-                    style={[styles.chip,
-                      {backgroundColor:colors.screen_componente_estilos.color_fondo,
-                       borderColor:colors.screen_componente_estilos.color_borde_cards}]}
+              {gruposEtiquetas.map(({ etiqueta, conceptos }, etiquetaIndex) => (
+                <View key={etiqueta.idetiqueta ?? etiqueta.id ?? `${etiqueta.nombre}-${etiquetaIndex}`} style={etiquetaIndex > 0 ? styles.grupoEtiqueta : undefined}>
+                  <View style={[styles.chip,
+                    {backgroundColor:colors.screen_componente_estilos.color_fondo,
+                     borderColor:colors.screen_componente_estilos.color_borde_cards}]}
                   >
-                    <Text style={[styles.chipText, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto }]}>
+                    <Text style={[styles.chipText, { fontFamily: fonts.balsamiqbold.fontFamily,color: colors.screen_componente_estilos.color_texto }]}>
                       {etiqueta.nombre}
                     </Text>
                   </View>
-                ))}
-              </View>
-            </View>
-          )}
-
-          
-          {datositem.conceptos?.length > 0 && (
-            <View style={[styles.card,{backgroundColor:colors.screen_componente_estilos.color_fondo_cards}]}>
-              <Text style={[styles.cardTitle, { fontFamily: fonts.balsamiqbold.fontFamily,color: colors.screen_componente_estilos.color_texto_subtitulo }]}>
-                CONCEPTOS
-              </Text>
-
-              <View style={[styles.tablaHeader,{borderBottomColor:colors.screen_componente_estilos.color_borde_cards}]}>
-                <Text style={[styles.tablaHeaderCelda, styles.colConcepto, { fontFamily: fonts.balsamiqbold.fontFamily,color: colors.screen_componente_estilos.color_texto_subtitulo }]}>
-                  Concepto
-                </Text>
-                <Text style={[styles.tablaHeaderCelda, styles.colEtiqueta, { fontFamily: fonts.balsamiqbold.fontFamily,color: colors.screen_componente_estilos.color_texto_subtitulo }]}>
-                  Etiqueta
-                </Text>
-              </View>
-
-              {datositem.conceptos.map((concepto, idx) => (
-                <View
-                  key={concepto.idconcepto}
-                  style={[styles.tablaFila, idx > 0 && styles.tablaFilaBorder, {borderTopColor:colors.screen_componente_estilos.color_borde_cards}]}
-                >
-                  <Text style={[styles.tablaCelda, styles.colConcepto, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto }]}>
-                    {concepto.nombre}
-                  </Text>
-                  <Text style={[styles.tablaCelda, styles.colEtiqueta, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto_subtitulo }]}>
-                    {concepto.etiqueta?.nombre}
-                  </Text>
+                  {conceptos.map((concepto, conceptoIndex) => (
+                    <Text
+                      key={concepto.idconcepto ?? `${concepto.nombre}-${conceptoIndex}`}
+                      style={[styles.conceptoEnEtiqueta, { fontFamily: fonts.balsamiqregular.fontFamily,color: colors.screen_componente_estilos.color_texto }]}
+                    >
+                      {concepto.nombre}
+                    </Text>
+                  ))}
                 </View>
               ))}
             </View>
@@ -587,11 +587,9 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
 
-  // ── ETIQUETAS (chips) ─────────────────────────────
-  chipsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+  // ── ETIQUETAS Y CONCEPTOS ─────────────────────────
+  grupoEtiqueta: {
+    marginTop: 12,
   },
   chip: {
     borderWidth: 0.5,
@@ -602,36 +600,9 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: 12,
   },
-
-  // ── CONCEPTOS (tabla) ─────────────────────────────
-  tablaHeader: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    paddingBottom: 8,
-    marginBottom: 4,
-  },
-  tablaHeaderCelda: {
-    fontSize: 10,
-    letterSpacing: 0.6,
-  },
-  tablaFila: {
-    flexDirection: 'row',
-    paddingVertical: 9,
-    alignItems: 'flex-start',
-  },
-  tablaFilaBorder: {
-    borderTopWidth: 0.5,
-  },
-  tablaCelda: {
-    fontSize: 12,
-  },
-  colConcepto: {
-    flex: 2,
-    paddingRight: 8,
-  },
-  colEtiqueta: {
-    flex: 1,
-    textAlign: 'right',
+  conceptoEnEtiqueta: {
+    marginTop: 6,
+    marginLeft: 8,
   },
 
   // ── BOTÓN COMPROBANTE ─────────────────────────────

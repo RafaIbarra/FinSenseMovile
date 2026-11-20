@@ -355,7 +355,7 @@ export default function RegistroMovimientoGasto({ navigation }){
         actualizarEstadocomponente('loading', true);
         try {
             const result = await apiRequest('gastos/extraer-clasificar', 'POST', formData, { timeout: 60000 });
-            console.error('Respuesta gastos/extraer-clasificar:', result);
+            //console.error('Respuesta gastos/extraer-clasificar:', result);
 
             if (result.sessionExpired) return;
             if (result.resp_correcta && result.data) {
@@ -388,26 +388,6 @@ export default function RegistroMovimientoGasto({ navigation }){
                 etiquetas: prev.clasificacion.etiquetas.map((etiqueta, index) => (
                     index === indice ? { ...etiqueta, [campo]: valor } : etiqueta
                 )),
-            },
-        }));
-    };
-
-    const quitarEtiqueta = (indice) => {
-        setPayload(prev => ({
-            ...prev,
-            clasificacion: {
-                ...prev.clasificacion,
-                etiquetas: prev.clasificacion.etiquetas.filter((_, index) => index !== indice),
-            },
-        }));
-    };
-
-    const agregarEtiqueta = () => {
-        setPayload(prev => ({
-            ...prev,
-            clasificacion: {
-                ...prev.clasificacion,
-                etiquetas: [...(prev.clasificacion.etiquetas || []), { etiqueta: '', conceptos: [] }],
             },
         }));
     };
@@ -957,22 +937,21 @@ export default function RegistroMovimientoGasto({ navigation }){
                     <TextInput value={payload.factura.rubro || ''} onChangeText={(value) => actualizarFactura('rubro', value)} placeholder="Rubro" placeholderTextColor={estilos.font_sub_color} style={[styles.textInput, { fontFamily: estilos.font_normal, color: estilos.font_color, borderColor: estilos.cards_color_border }]} />
                 </>}
 
-                {/* ── Etiquetas y conceptos ── */}
-                {/* <Text style={[styles.label, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>
-                    Etiquetas y conceptos
-                </Text>
-                {payload.clasificacion.etiquetas?.map((etiqueta, etiquetaIndex) => (
-                    <View key={`etiqueta-${etiquetaIndex}`} style={[styles.etiquetaCard, { backgroundColor: estilos.cards_color_fondo, borderColor: estilos.cards_color_border }]}>
-                        <View style={styles.filaEtiqueta}>
-                            <TextInput value={etiqueta.etiqueta || ''} onChangeText={(value) => actualizarEtiqueta(etiquetaIndex, 'etiqueta', value)} placeholder="Nombre de etiqueta" placeholderTextColor={estilos.font_sub_color} style={[styles.textInput, styles.inputEtiqueta, { fontFamily: estilos.font_normal, color: estilos.font_color, borderColor: estilos.cards_color_border }]} />
-                            <TouchableOpacity onPress={() => quitarEtiqueta(etiquetaIndex)}><Text style={{ color: estilos.font_sub_color, fontSize: 18 }}>✕</Text></TouchableOpacity>
+                {modoRegistro === 'asistido' && <>
+                    <Text style={[styles.label, { fontFamily: estilos.font_normal, color: estilos.font_sub_color }]}>
+                        Etiquetas y conceptos
+                    </Text>
+                    {(Array.isArray(payload.clasificacion.etiquetas) ? payload.clasificacion.etiquetas : []).map((etiqueta, etiquetaIndex) => (
+                        <View key={`etiqueta-${etiquetaIndex}`} style={[styles.etiquetaCard, { backgroundColor: estilos.cards_color_fondo, borderColor: estilos.cards_color_border }]}>
+                            <View style={styles.filaEtiqueta}>
+                                <TextInput value={etiqueta.etiqueta || ''} onChangeText={(value) => actualizarEtiqueta(etiquetaIndex, 'etiqueta', value)} placeholder="Nombre de etiqueta" placeholderTextColor={estilos.font_sub_color} style={[styles.textInput, styles.inputEtiqueta, { fontFamily: estilos.font_normal, color: estilos.font_color, borderColor: estilos.cards_color_border }]} />
+                            </View>
+                            {etiqueta.conceptos?.map((concepto, conceptoIndex) => (
+                                <TextInput key={`concepto-${etiquetaIndex}-${conceptoIndex}`} value={concepto} onChangeText={(value) => actualizarConcepto(etiquetaIndex, conceptoIndex, value)} placeholder="Concepto" placeholderTextColor={estilos.font_sub_color} style={[styles.textInput, { fontFamily: estilos.font_normal, color: estilos.font_color, borderColor: estilos.cards_color_border }]} />
+                            ))}
                         </View>
-                        {etiqueta.conceptos?.map((concepto, conceptoIndex) => (
-                            <TextInput key={`concepto-${etiquetaIndex}-${conceptoIndex}`} value={concepto} onChangeText={(value) => actualizarConcepto(etiquetaIndex, conceptoIndex, value)} placeholder="Concepto" placeholderTextColor={estilos.font_sub_color} style={[styles.textInput, { fontFamily: estilos.font_normal, color: estilos.font_color, borderColor: estilos.cards_color_border }]} />
-                        ))}
-                    </View>
-                ))}
-                <TouchableOpacity onPress={agregarEtiqueta} style={styles.agregarEtiqueta}><Text style={{ fontFamily: estilos.font_negrita, color: estilos.font_importe_color }}>+ AGREGAR ETIQUETA</Text></TouchableOpacity> */}
+                    ))}
+                </>}
 
                 <Text style={[styles.subtitulo, { fontFamily: estilos.font_negrita, color: estilos.font_color }]}>Medios de pago</Text>
                 {mediosPagoDisponibles.length === 0 ? (
